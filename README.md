@@ -78,6 +78,8 @@ Each scenario produces a dual metric:
 
 ## Demo
 
+[**Pipeline Flow Diagram**](https://muneezaazmat.github.io/experiments/agent-policy-redteam/pipeline-flow.html) — detailed visual walkthrough of the full pipeline architecture.
+
 Open [`demo.html`](demo.html) in a browser for an interactive walkthrough populated with real run data. Includes:
 - Pipeline overview with implementation detail popups for each stage
 - Side-by-side comparison of both attack patterns
