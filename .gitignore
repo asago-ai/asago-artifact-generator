@@ -1,2 +1,11 @@
 __pycache__/
 *.pyc
+/superpowers/*
+docs/superpowers/
+/ArtifactGen_garak/run_garak_batch.py
+/reports/*
+/runs/*
+*html
+redhat-logo.png
+.env
+run_garak_batch.py
