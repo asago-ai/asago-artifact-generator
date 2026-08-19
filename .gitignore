@@ -4,7 +4,6 @@ __pycache__/
 docs/superpowers/
 /ArtifactGen_garak/run_garak_batch.py
 /reports/*
-/runs/*
 *html
 redhat-logo.png
 .env

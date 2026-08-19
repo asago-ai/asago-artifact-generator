@@ -463,7 +463,8 @@ else:
     rows = []
     for i, t in enumerate(artifact.get("turns") or []):
         flag = " **ATTACK**" if t.get("adversarial") else ""
-        tool = f" `{t.get('tool_name')}`" if t.get("tool_name") else ""
+        tool = t.get("tool_name") or t.get("name")
+        tool = f" `{tool}`" if tool else ""
         body = (t.get("content") or "").replace("\\n", " ")
         if len(body) > 280:
             body = body[:280] + "…"
