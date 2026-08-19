@@ -1,10 +1,35 @@
+# Python and packaging
 __pycache__/
-*.pyc
-/superpowers/*
-docs/superpowers/
-/ArtifactGen_garak/run_garak_batch.py
-/reports/*
+*.py[codz]
+*.egg-info/
+.Python
+.venv*/
+venv/
+dist/
+build/
+
+# Tests and tools
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Generated output
+runs/
+reports/
 *html
 redhat-logo.png
+
+# Secrets and local configuration
 .env
+.env.*
+
+# Editor and operating-system state
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Scratch and legacy
+/superpowers/*
+docs/superpowers/
 run_garak_batch.py
