@@ -37,6 +37,8 @@ SKIP_VALIDATION_CHECKS = (
     "(user_turn, tool_return, or system_prompt). Unwritable surfaces skip LLM generation."
 )
 
+ARTIFACT_DISCLOSURE = "This artifact contains AI generated content"
+
 
 def validate_tool_flow(spec: dict) -> list[str]:
     """Structural checks on raw LLM probe JSON, before metadata merge."""
@@ -211,6 +213,7 @@ def _artifact_header(
         "injection_surface": injection_surface,
         "narrative": {"summary": str(narrative.get("summary", ""))},
         "platform_coverage": platform_coverage,
+        "disclosure": ARTIFACT_DISCLOSURE,
         "model": model,
         "timestamp": timestamp or _utc_timestamp(),
     }

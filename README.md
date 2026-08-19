@@ -85,6 +85,7 @@ runs/
 
 - `scenario_id`, `injection_surface`, `platform_coverage` (`full` | `partial` | `null` for skips)
 - `narrative.summary`
+- `disclosure` — `"This artifact contains AI generated content"`
 - `model` — LLM used for generation (`null` on skip)
 - `timestamp` — UTC ISO time when the artifact was written
 - `turns[]` with adversarial attack turn
@@ -127,10 +128,9 @@ The unit test suite is deterministic and does not require an LLM endpoint.
 
 ```
 ├── src/asago_artifact_generator/    # shared models, LLM client, CLI
-│   ├── garak/                        # Garak platform generator
-│   │   ├── plugins/                  # probe + detector sources
-│   │   └── prompts/                  # generation prompt
-│   └── data/                         # exploit styles catalog
+│   └── garak/                        # Garak platform generator
+│       ├── plugins/                  # probe + detector sources
+│       └── prompts/                  # generation prompt
 ├── tests/                            # unit tests
 ├── examples/
 │   ├── scenarios/                    # input scenario YAMLs

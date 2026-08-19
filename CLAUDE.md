@@ -20,7 +20,7 @@ via `.env` or environment variables.
 ## Architecture
 
 - `src/asago_artifact_generator/` contains shared domain models, the LLM
-  client, exploit-style catalog, and the `typer` CLI.
+  client, and the `typer` CLI.
 - `src/asago_artifact_generator/garak/` contains the Garak platform generator:
   classification, gating, probe specification, artifact I/O, prompt templates,
   and Garak plugin sources (probe + detector).
@@ -30,7 +30,7 @@ via `.env` or environment variables.
 
 Read `README.md` before changing the pipeline interface. Each platform
 generator lives in its own subpackage (`garak/`, future `agentdojo/`, `pyrit/`)
-and shares the parent package modules (`extract`, `llm`, `exploit_catalog`).
+and shares the parent package modules (`extract`, `llm`).
 
 ## Development
 

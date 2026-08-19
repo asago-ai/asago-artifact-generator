@@ -8,6 +8,7 @@ from pathlib import Path
 
 from asago_artifact_generator.extract import ScenarioContext, load_scenario
 from asago_artifact_generator.garak.probe_spec import (
+    ARTIFACT_DISCLOSURE,
     PROBE_VALIDATION_CHECKS,
     DetectorRubric,
     ProbeTurn,
@@ -77,6 +78,7 @@ class TestProbeArtifact(unittest.TestCase):
         self.assertEqual(data["scenario_id"], ctx.scenario_id)
         self.assertEqual(data["injection_surface"], "tool_definition")
         self.assertIsNone(data["platform_coverage"])
+        self.assertEqual(data["disclosure"], ARTIFACT_DISCLOSURE)
         self.assertIsNone(data["model"])
         self.assertIn("timestamp", data)
         self.assertIn("summary", data["narrative"])
@@ -114,6 +116,7 @@ class TestProbeArtifact(unittest.TestCase):
         self.assertEqual(list(data["narrative"].keys()), ["summary"])
         self.assertIn("summary", data["narrative"])
         self.assertEqual(data["platform_coverage"], "full")
+        self.assertEqual(data["disclosure"], ARTIFACT_DISCLOSURE)
         self.assertEqual(data["model"], MODEL)
         self.assertRegex(data["timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
         self.assertNotIn("probe_name", data)
