@@ -1,0 +1,40 @@
+# Asago Artifact Generator
+
+Policy-driven agentic red-teaming: takes pre-built scenario YAMLs, classifies
+their injection surface, and generates red-teaming artifacts for downstream
+evaluation platforms.
+
+## Commands
+
+```bash
+uv sync --locked
+./scripts/quality.sh
+uv run pytest tests/ -q
+asago-artifact-generator generate -v
+```
+
+Deterministic tests do not require an LLM endpoint. Live generation requires
+a configured provider (Gemini, OpenAI, Ollama, Hugging Face, or OpenRouter)
+via `.env` or environment variables.
+
+## Architecture
+
+- `src/asago_artifact_generator/` contains shared domain models, the LLM
+  client, exploit-style catalog, and the `typer` CLI.
+- `src/asago_artifact_generator/garak/` contains the Garak platform generator:
+  classification, gating, probe specification, artifact I/O, prompt templates,
+  and Garak plugin sources (probe + detector).
+- `examples/scenarios/` contains committed input scenario YAMLs.
+- `examples/demo/` contains the interactive Jupyter walkthrough and runtime.
+- `runs/` holds generated artifacts (gitignored).
+
+Read `README.md` before changing the pipeline interface. Each platform
+generator lives in its own subpackage (`garak/`, future `agentdojo/`, `pyrit/`)
+and shares the parent package modules (`extract`, `llm`, `exploit_catalog`).
+
+## Development
+
+- Track durable work in GitHub Issues and PRs.
+- Run `./scripts/quality.sh` before pushing; CI enforces `ruff` + `pytest`.
+- Update `README.md` and this file when an interface or workflow changes.
+- `AGENTS.md` is a symlink to this file.
