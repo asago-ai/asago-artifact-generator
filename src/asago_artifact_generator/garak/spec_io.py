@@ -86,8 +86,9 @@ def load_garak_artifact(path: str | Path) -> dict[str, Any]:
         data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError(f"Invalid artifact root in {p}")
-    if data.get("turns"):
+    if data.get("turns") or data.get("prompts"):
         return data
-    if data.get("prompts"):
+    # Skip / no-coverage artifacts have no transcript.
+    if data.get("scenario_id") and data.get("platform_coverage") is None:
         return data
     raise ValueError(f"Artifact {p} must include turns[] or legacy prompts[]")

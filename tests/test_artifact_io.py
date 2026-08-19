@@ -76,7 +76,7 @@ class TestProbeArtifact(unittest.TestCase):
         )
         data = skip_to_artifact_dict(ctx)
         self.assertEqual(data["scenario_id"], ctx.scenario_id)
-        self.assertEqual(data["injection_surface"], "tool_definition")
+        self.assertEqual(data["injection_surface"], "none")
         self.assertIsNone(data["platform_coverage"])
         self.assertEqual(data["disclosure"], ARTIFACT_DISCLOSURE)
         self.assertIsNone(data["model"])
@@ -84,6 +84,36 @@ class TestProbeArtifact(unittest.TestCase):
         self.assertIn("summary", data["narrative"])
         self.assertNotIn("turns", data)
         self.assertNotIn("detector_rubric", data)
+
+    def test_load_skip_artifact_without_turns(self):
+        import tempfile
+
+        from asago_artifact_generator.garak.spec_io import load_garak_artifact, save_garak_artifact
+
+        ctx = load_scenario(
+            Path(__file__).resolve().parents[1]
+            / "examples"
+            / "scenarios"
+            / "AP-T17-01-00d278.yaml"
+        )
+        data = skip_to_artifact_dict(ctx)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = save_garak_artifact(ctx.scenario_id, data, Path(tmp))
+            loaded = load_garak_artifact(path)
+        self.assertEqual(loaded["injection_surface"], "none")
+        self.assertIsNone(loaded["platform_coverage"])
+        self.assertNotIn("turns", loaded)
+
+    def test_load_rejects_non_artifact(self):
+        import tempfile
+
+        from asago_artifact_generator.garak.spec_io import load_garak_artifact
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "empty.json"
+            path.write_text("{}", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_garak_artifact(path)
 
     def test_scenario_to_yaml_strips_narrative(self):
         ctx = self._minimal_ctx()

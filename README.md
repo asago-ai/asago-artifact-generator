@@ -26,8 +26,8 @@ Supported LLM backends: **Gemini** (default when `GEMINI_API_KEY` is set), **Ope
 
 ## How it works
 
-1. **Classify** the injection surface from the scenario seed (`user_turn`, `tool_return`, `system_prompt`, or skip).
-2. **Skip** surfaces the target platform cannot express.
+1. **Classify** the injection surface from `narrative.entry_point` (`input` → `user_turn`, `tool_execution` → `tool_return`). Supply chain threats (`threat_name`) skip with no coverage.
+2. **Skip** surfaces the target platform cannot express (including supply chain).
 3. **Generate** a red-teaming artifact for that platform (transcript, probe, or equivalent).
 4. **Validate** structural gates so the artifact is runnable downstream.
 5. **Gate** platform coverage: `full`, `partial`, or `skip`.
@@ -63,8 +63,8 @@ asago-artifact-generator generate -v
 
 ### Pipeline
 
-1. **Classify** injection surface from scenario seed (`user_turn`, `tool_return`, `system_prompt`, or skip).
-2. **Skip** unwritable surfaces (e.g. `tool_definition`) — writes a minimal artifact without calling the LLM.
+1. **Classify** injection surface from `narrative.entry_point` (`input` → `user_turn`, `tool_execution` → `tool_return`). `threat_name` containing “supply chain” is `none` (no coverage).
+2. **Skip** unwritable surfaces (supply chain / `none`) — writes a minimal artifact without calling the LLM.
 3. **Generate** probe via one-shot LLM (`prompts/generate_artifact.md`).
 4. **Validate** structural gates (rubric completeness, surface/turn alignment, schema).
 5. **Gate** platform coverage: `full`, `partial`, or `skip`.
@@ -101,19 +101,25 @@ runs/
 }
 ```
 
-Skipped scenarios (unwritable surfaces) get a pre-plan `checks` string and no LLM call.
+Skipped scenarios (supply chain / unwritable surfaces) get a pre-plan `checks` string and no LLM call.
 
 **`manifest.json`** — batch summary (`gate_result`, `gate_reason`, `artifact_path` per scenario).
 
 ## Interactive demo
 
-End-to-end Jupyter walkthrough (API key → scenario YAML → artifact → Garak `toolchat.ToolChat` attack):
+End-to-end Jupyter walkthrough (API key → scenario YAML → artifact → Garak `toolchat.ToolChat` attack).
+
+From the **repository root**:
 
 ```bash
 uv sync --locked
-pip install ipywidgets
-jupyter notebook examples/demo/demo.ipynb
+uv pip install ipywidgets jupyter ipykernel
+uv run python -m ipykernel install --user --name asago-artifact-generator --display-name "asago-artifact-generator"
+cp .env.example .env   # set GEMINI_API_KEY or GOOGLE_API_KEY
+uv run jupyter notebook examples/demo/garak-artifact-demo.ipynb
 ```
+
+In Cursor / VS Code, pick this repo’s `.venv` as the notebook kernel. Gemini is a first-class provider (`GEMINI_API_KEY` or `GOOGLE_API_KEY`).
 
 ## Development
 

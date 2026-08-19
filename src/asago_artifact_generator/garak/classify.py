@@ -1,7 +1,8 @@
-"""Deterministic injection-surface lookup + Garak gate classification."""
+"""Injection-surface classification from scenario YAML + Garak gate."""
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from ..extract import ScenarioContext, name_in_source
@@ -16,33 +17,40 @@ InjectionSurface = Literal[
     "none",
 ]
 
-_CLASSIFICATION: dict[str, str] = {
-    "AP-T2": "user_turn",
-    "AP-T3": "user_turn",
-    "AP-T7-01": "user_turn",
-    "AP-T7-02": "tool_return",
-    "AP-T7-03": "tool_return",
-    "AP-T7-04": "tool_return",
-    "AP-T7-05": "tool_return",
-    "AP-T8": "user_turn",
-    "AP-T9": "tool_return",
-    "AP-T11-01": "user_turn",
-    "AP-T11-02": "tool_return",
-    "AP-T11-03": "user_turn",
-    "AP-T15-01": "user_turn",
-    "AP-T15-02": "tool_return",
-    "AP-T17-01": "system_prompt",
-    "AP-T17-02": "tool_definition",
-}
-
 GARAK_WRITABLE = {"user_turn", "tool_return", "system_prompt"}
 
+_ENTRY_ZONE = re.compile(r"\(([^)]+)\)\s*$")
 
-def lookup_surface(seed_id: str) -> InjectionSurface:
-    if seed_id in _CLASSIFICATION:
-        return _CLASSIFICATION[seed_id]  # type: ignore[return-value]
-    prefix = "-".join(seed_id.split("-")[:2])
-    return _CLASSIFICATION.get(prefix, "user_turn")  # type: ignore[return-value]
+_ZONE_TO_SURFACE: dict[str, InjectionSurface] = {
+    "input": "user_turn",
+    "tool_execution": "tool_return",
+}
+
+
+def is_supply_chain(threat_name: str) -> bool:
+    return "supply chain" in threat_name.lower()
+
+
+def entry_zone(entry_point: str) -> str | None:
+    match = _ENTRY_ZONE.search(entry_point.strip())
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def lookup_surface(ctx: ScenarioContext) -> InjectionSurface:
+    """Map YAML narrative zone to a Garak injection surface.
+
+    Supply-chain threats have no Garak coverage (`none`). Otherwise the
+    parenthetical zone on `narrative.entry_point` selects the chat role:
+    `input` → `user_turn`, `tool_execution` → `tool_return`.
+    """
+    if is_supply_chain(ctx.threat_name):
+        return "none"
+    zone = entry_zone(ctx.entry_point)
+    if zone in _ZONE_TO_SURFACE:
+        return _ZONE_TO_SURFACE[zone]
+    return "user_turn"
 
 
 def first_injection_step(ctx: ScenarioContext) -> int | None:
@@ -57,9 +65,13 @@ def first_injection_step(ctx: ScenarioContext) -> int | None:
 def surface_skip_reason(ctx: ScenarioContext, *, surface: str | None = None) -> str | None:
     """Deterministic pre-plan gate: return skip reason, or None to proceed."""
     sid = ctx.seed_id or ctx.scenario_id
-    surf = surface or lookup_surface(ctx.seed_id)
+    surf = surface or lookup_surface(ctx)
 
-    if surf in ("none", "data_store"):
+    if is_supply_chain(ctx.threat_name):
+        return f"Garak has no coverage for supply chain threats ({sid})"
+    if surf == "none":
+        return f"Garak has no coverage ({sid})"
+    if surf == "data_store":
         return f"unclassified or data_store surface for {sid}"
     if surf == "tool_definition":
         return f"Garak cannot write to tool_definition surface ({sid})"
@@ -78,7 +90,7 @@ def classify_garak(
 ) -> tuple[GateResult, str]:
     """Return (gate_result, reason) after probe generation — full / partial / skip."""
     sid = ctx.seed_id or ctx.scenario_id
-    surf = surface or lookup_surface(ctx.seed_id)
+    surf = surface or lookup_surface(ctx)
 
     skip = surface_skip_reason(ctx, surface=surf)
     if skip:

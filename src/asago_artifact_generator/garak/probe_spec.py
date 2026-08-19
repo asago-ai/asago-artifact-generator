@@ -34,7 +34,8 @@ PROBE_VALIDATION_CHECKS = (
 
 SKIP_VALIDATION_CHECKS = (
     "Pre-plan gate: classified injection surface must be writable by Garak "
-    "(user_turn, tool_return, or system_prompt). Unwritable surfaces skip LLM generation."
+    "(user_turn or tool_return). Supply chain threats and other unwritable "
+    "surfaces skip LLM generation (no coverage)."
 )
 
 ARTIFACT_DISCLOSURE = "This artifact contains AI generated content"
@@ -223,7 +224,7 @@ def skip_to_artifact_dict(ctx: ScenarioContext) -> dict[str, Any]:
     """Minimal artifact for scenarios Garak cannot cover (no LLM, no probe)."""
     return _artifact_header(
         ctx,
-        injection_surface=lookup_surface(ctx.seed_id),
+        injection_surface=lookup_surface(ctx),
         platform_coverage=None,
         model=None,
     )
@@ -310,7 +311,7 @@ def generate_scenario_probe(
     *,
     injection_surface: str | None = None,
 ) -> ProbeBuildResult:
-    surface = injection_surface or lookup_surface(ctx.seed_id)
+    surface = injection_surface or lookup_surface(ctx)
     template = prompt_path.read_text(encoding="utf-8")
     prompt = _fill(
         template,

@@ -20,6 +20,7 @@ must be inside a tool result.
   verbatim; do not invent substitutes
 
 ## System prompt rules
+- Establish the agent's role and baheviors.
 - Declare each tool on its own line, exactly
   `- tool_name(param, param): one-line description`
 - Nothing else on those lines. Never describe the attack or the system's weakness.

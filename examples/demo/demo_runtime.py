@@ -157,7 +157,7 @@ def apply_artifact_llm(
     model: str,
     api_key: str,
 ) -> dict[str, str]:
-    from asago_artifact_generator.llm import configure_llm, PROVIDER, MODEL, BASE_URL
+    from asago_artifact_generator.llm import BASE_URL, MODEL, PROVIDER, configure_llm
 
     key = api_key.strip() or ("ollama" if provider == "ollama" else "")
     configure_llm(
@@ -186,7 +186,7 @@ def write_custom_scenario(repo: Path, yaml_text: str) -> Path:
 def classify_preview(ctx) -> dict[str, Any]:
     from asago_artifact_generator.garak.classify import lookup_surface, surface_skip_reason
 
-    surface = lookup_surface(ctx.seed_id)
+    surface = lookup_surface(ctx)
     skip = surface_skip_reason(ctx, surface=surface)
     return {
         "scenario_id": ctx.scenario_id,
@@ -214,9 +214,7 @@ def ensure_garak_plugins(repo: Path, garak_root: Path) -> dict[str, str]:
     """Copy scenario probe/detector into a local garak checkout so CLI can load them."""
     probe_src, det_src = plugin_sources(repo)
     if not probe_src.is_file() or not det_src.is_file():
-        raise FileNotFoundError(
-            f"Plugin sources missing: {probe_src} / {det_src}"
-        )
+        raise FileNotFoundError(f"Plugin sources missing: {probe_src} / {det_src}")
     probe_dst = garak_root / "garak" / "probes" / PLUGIN_PROBE
     det_dst = garak_root / "garak" / "detectors" / PLUGIN_DETECTOR
     if not (garak_root / "garak" / "probes").is_dir():
@@ -339,9 +337,9 @@ def run_garak_toolchat(
             dest.glob("*.report.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
         )
         report_jsonl = candidates[0] if candidates else report_jsonl
-    summary = summarize_report(report_jsonl) if report_jsonl.exists() else {
-        "status": "missing_report"
-    }
+    summary = (
+        summarize_report(report_jsonl) if report_jsonl.exists() else {"status": "missing_report"}
+    )
     result = {
         "scenario_id": sid,
         "exit_code": proc.returncode,
@@ -390,16 +388,12 @@ def summarize_report(report_path: Path) -> dict[str, Any]:
                 else:
                     text, notes = str(o), {}
                 if text or notes:
-                    summary["outputs"].append(
-                        {"text": (text or "")[:4000], "notes": notes}
-                    )
+                    summary["outputs"].append({"text": (text or "")[:4000], "notes": notes})
             for det, scores in (row.get("detector_results") or {}).items():
                 vals = scores if isinstance(scores, list) else [scores]
                 for s in vals:
                     try:
-                        summary["detector_scores"].append(
-                            {"detector": det, "score": float(s)}
-                        )
+                        summary["detector_scores"].append({"detector": det, "score": float(s)})
                     except (TypeError, ValueError):
                         pass
         elif et == "eval":

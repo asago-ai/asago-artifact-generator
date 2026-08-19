@@ -82,7 +82,7 @@ def generate_artifact(
             errors=["Artifact generation requires LLM (omit --no-llm)"],
         )
 
-    injection_surface = lookup_surface(ctx.seed_id)
+    injection_surface = lookup_surface(ctx)
     log.info(
         "Classified %s injection_surface=%s",
         ctx.scenario_id,
