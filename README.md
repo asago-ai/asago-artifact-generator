@@ -29,7 +29,7 @@ Supported LLM backends: **Gemini** (default when `GEMINI_API_KEY` is set), **Ope
 1. **Classify** the injection surface from `narrative.entry_point` (`input` → `user_turn`, `tool_execution` → `tool_return`). Supply chain threats (`threat_name`) skip with no coverage.
 2. **Skip** surfaces the target platform cannot express (including supply chain).
 3. **Generate** a red-teaming artifact for that platform (transcript, probe, or equivalent).
-4. **Validate** structural gates so the artifact is runnable downstream.
+4. **Validate** deos the artifact pass all checks (`ok` / `errors`). 
 5. **Gate** platform coverage: `full`, `partial`, or `skip`.
 
 ## Supported platforms
@@ -55,7 +55,7 @@ asago-artifact-generator generate -v
 
 | Flag | Effect |
 |------|--------|
-| `--force` | Write garak JSON even when structural validation fails (`ok` stays false; the command still exits 1) |
+| `--force` | Write garak JSON even when structural validation fails |
 | `--dry-run` | Classify + LLM + validate only — no files written |
 | `--no-llm` | Skip LLM (useful to test pre-plan surface skips) |
 | `--output-dir DIR` | Override default `runs/` output directory |
@@ -66,8 +66,8 @@ asago-artifact-generator generate -v
 1. **Classify** injection surface from `narrative.entry_point` (`input` → `user_turn`, `tool_execution` → `tool_return`). `threat_name` containing “supply chain” is `none` (no coverage).
 2. **Skip** unwritable surfaces (supply chain / `none`) — writes a minimal artifact without calling the LLM.
 3. **Generate** probe via one-shot LLM (`prompts/generate_artifact.md`).
-4. **Validate** structural gates (rubric completeness, surface/turn alignment, schema).
-5. **Gate** platform coverage: `full`, `partial`, or `skip`.
+4. **Validate** structural gates (rubric completeness, surface/turn alignment, schema). 
+5. **Gate** platform coverage: `full`, `partial`, or `skip` .
 
 ## Output layout
 
@@ -103,7 +103,7 @@ runs/
 
 Skipped scenarios (supply chain / unwritable surfaces) get a pre-plan `checks` string and no LLM call.
 
-**`manifest.json`** — batch summary (`gate_result`, `gate_reason`, `artifact_path` per scenario).
+**`manifest.json`** — batch summary (`ok`, `gate_result`, `gate_reason`, `artifact_path`, optional `errors` per scenario). `gate_result` is coverage only.
 
 ## Interactive demo
 

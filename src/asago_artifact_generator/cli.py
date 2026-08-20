@@ -78,7 +78,9 @@ def generate(
         raise typer.Exit(1)
 
     manifest: list[dict] = []
-    counts = {"full": 0, "partial": 0, "skip": 0, "error": 0}
+    coverage_counts = {"full": 0, "partial": 0, "skip": 0}
+    validation_failed = 0
+    process_errors = 0
     failed = False
 
     for path in paths:
@@ -102,8 +104,10 @@ def generate(
             if result.errors:
                 entry["errors"] = result.errors
             manifest.append(entry)
-            counts[result.gate] += 1
+            if result.gate in coverage_counts:
+                coverage_counts[result.gate] += 1
             if not result.ok:
+                validation_failed += 1
                 failed = True
         except Exception as e:
             log.error("ERROR processing %s: %s", path.name, e)
@@ -111,11 +115,10 @@ def generate(
                 {
                     "scenario_id": path.stem,
                     "ok": False,
-                    "gate_result": "error",
                     "error": str(e),
                 }
             )
-            counts["error"] += 1
+            process_errors += 1
             failed = True
 
     if not dry_run:
@@ -129,18 +132,22 @@ def generate(
     print("Garak artifact generation summary")
     print(f"{'=' * 50}")
     print(f"Total scenarios: {len(manifest)}")
-    print(f"  Full:    {counts['full']}")
-    print(f"  Partial: {counts['partial']}")
-    print(f"  Skip:    {counts['skip']}")
-    print(f"  Error:   {counts['error']}")
+    print("Coverage:")
+    print(f"  Full:    {coverage_counts['full']}")
+    print(f"  Partial: {coverage_counts['partial']}")
+    print(f"  Skip:    {coverage_counts['skip']}")
+    print(f"Validation failed: {validation_failed}")
+    if process_errors:
+        print(f"Process errors:    {process_errors}")
 
-    print(f"\n{'Scenario':<25} {'Gate':<8} {'Reason'}")
-    print("-" * 70)
+    print(f"\n{'Scenario':<25} {'Gate':<8} {'Ok':<6} {'Reason'}")
+    print("-" * 80)
     for e in manifest:
         sid = e.get("scenario_id", "?")
-        gr = e.get("gate_result", "?")
+        gr = e.get("gate_result", "-")
+        ok = "yes" if e.get("ok") else "no"
         reason = e.get("gate_reason", e.get("error", ""))
-        print(f"{sid:<25} {gr:<8} {reason}")
+        print(f"{sid:<25} {gr:<8} {ok:<6} {reason}")
 
     if failed:
         raise typer.Exit(1)

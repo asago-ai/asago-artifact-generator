@@ -38,6 +38,24 @@ class GenResult:
     errors: list[str] | None = None
 
 
+def _trigger_tool(ctx: ScenarioContext) -> str:
+    for name in ctx.quoted_tools:
+        if any(k in name for k in ("refund", "payment", "modify")):
+            return name
+    return ctx.quoted_tools[0] if ctx.quoted_tools else ""
+
+
+def _coverage(ctx: ScenarioContext, surface: str) -> tuple[str, str]:
+    trigger = _trigger_tool(ctx)
+    return gate_from_context(
+        ctx,
+        surface=surface,
+        trigger_tool=trigger,
+        oracle_kind="forbidden_call" if trigger else "output_string",
+        tools_grounded=bool(ctx.quoted_tools),
+    )
+
+
 def generate_artifact(
     ctx: ScenarioContext,
     *,
@@ -47,7 +65,12 @@ def generate_artifact(
     force: bool = False,
     dry_run: bool = False,
 ) -> GenResult:
-    """Scenario YAML → runs/{scenario_id}/{scenario_id}-garak.json."""
+    """Scenario YAML → runs/{scenario_id}/{scenario_id}-garak.json.
+
+    ``gate`` is Garak coverage (full / partial / skip) 
+    ``ok`` / ``errors`` are structural validation.
+    ``force`` only controls whether an invalid probe JSON is written.
+    """
     prompt = prompt_path or GENERATE_ARTIFACT_PROMPT
     out_base = runs_dir(output_dir)
 
@@ -74,20 +97,23 @@ def generate_artifact(
             artifact_path=artifact_path,
         )
 
+    injection_surface = lookup_surface(ctx)
+    gate_result, gate_reason = _coverage(ctx, injection_surface)
+    log.info(
+        "Classified %s injection_surface=%s coverage=%s",
+        ctx.scenario_id,
+        injection_surface,
+        gate_result,
+    )
+
     if not use_llm:
         return GenResult(
             scenario_id=ctx.scenario_id,
             ok=False,
-            gate="error",
+            gate=gate_result,
+            gate_reason=gate_reason,
             errors=["Artifact generation requires LLM (omit --no-llm)"],
         )
-
-    injection_surface = lookup_surface(ctx)
-    log.info(
-        "Classified %s injection_surface=%s",
-        ctx.scenario_id,
-        injection_surface,
-    )
 
     probe_result = generate_scenario_probe(ctx, prompt, injection_surface=injection_surface)
     save_validation(
@@ -98,34 +124,16 @@ def generate_artifact(
         checks=PROBE_VALIDATION_CHECKS,
     )
 
-    trigger = ""
-    for name in ctx.quoted_tools:
-        if any(k in name for k in ("refund", "payment", "modify")):
-            trigger = name
-            break
-    if not trigger and ctx.quoted_tools:
-        trigger = ctx.quoted_tools[0]
-    gate_result, gate_reason = gate_from_context(
-        ctx,
-        surface=injection_surface,
-        trigger_tool=trigger,
-        oracle_kind="forbidden_call" if trigger else "output_string",
-        tools_grounded=bool(ctx.quoted_tools),
-    )
     if not probe_result.ok:
-        detail = "; ".join(probe_result.errors)
-        gate_result = "partial" if force else "error"
-        gate_reason = f"{gate_reason}; {detail}" if detail else gate_reason
-
-    if not probe_result.ok and not force:
-        log.warning("Probe gate failed for %s: %s", ctx.scenario_id, probe_result.errors)
-        return GenResult(
-            scenario_id=ctx.scenario_id,
-            ok=False,
-            gate="error",
-            gate_reason=gate_reason,
-            errors=probe_result.errors,
-        )
+        log.warning("Probe validation failed for %s: %s", ctx.scenario_id, probe_result.errors)
+        if not force:
+            return GenResult(
+                scenario_id=ctx.scenario_id,
+                ok=False,
+                gate=gate_result,
+                gate_reason=gate_reason,
+                errors=probe_result.errors,
+            )
 
     if dry_run:
         log.info("DRY-RUN %s — gate=%s (%s)", ctx.scenario_id, gate_result, gate_reason)
