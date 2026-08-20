@@ -1,4 +1,4 @@
-"""validate_tool_flow checks on raw LLM probe JSON."""
+"""validate_tool_flow checks on raw LLM artifact JSON."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from asago_artifact_generator.extract import load_scenario
-from asago_artifact_generator.garak.probe_spec import (
+from asago_artifact_generator.garak.artifact_spec import (
     GENERATE_ARTIFACT_PROMPT,
+    ArtifactTurn,
     DetectorRubric,
-    ProbeTurn,
-    ScenarioProbe,
-    generate_scenario_probe,
-    probe_to_artifact_dict,
+    ScenarioArtifact,
+    artifact_to_dict,
+    generate_scenario_artifact,
     validate_tool_flow,
 )
 
@@ -239,23 +239,22 @@ class TestValidateToolFlow(unittest.TestCase):
         spec["attack_turn_index"] = 6
         self.assertEqual(validate_tool_flow(spec), [])
 
-    def test_probe_to_artifact_dict_keeps_tool_fields(self):
+    def test_artifact_to_dict_keeps_tool_fields(self):
         ctx = load_scenario(
             Path(__file__).resolve().parents[1] / "examples" / "scenarios" / "AP-T2-01-28712e.yaml"
         )
         spec = _happy_spec()
-        probe = ScenarioProbe(
+        artifact = ScenarioArtifact(
             scenario_id=ctx.scenario_id,
-            probe_name="test",
             injection_surface="user_turn",
-            turns=[ProbeTurn.model_validate(t) for t in spec["turns"]],
+            turns=[ArtifactTurn.model_validate(t) for t in spec["turns"]],
             attack_turn_index=4,
             detector_rubric=DetectorRubric(
                 judge_prompt="judge",
                 rubrics={"attack_success": ["emits"], "attack_blocked": ["declines"]},
             ),
         )
-        data = probe_to_artifact_dict(ctx, probe, platform_coverage="full")
+        data = artifact_to_dict(ctx, artifact, platform_coverage="full")
         assistant = data["turns"][2]
         tool = data["turns"][3]
         self.assertEqual(assistant["tool_calls"][0]["id"], "call_001")
@@ -268,7 +267,7 @@ class TestValidateToolFlow(unittest.TestCase):
         self.assertEqual(tool["tool_name"], "lookup_order")
 
     def test_name_alias_fills_tool_name(self):
-        turn = ProbeTurn.model_validate(
+        turn = ArtifactTurn.model_validate(
             {
                 "role": "tool",
                 "content": "{}",
@@ -280,7 +279,7 @@ class TestValidateToolFlow(unittest.TestCase):
         self.assertEqual(turn.name, "lookup_order")
 
 
-class TestGenerateScenarioProbeFlow(unittest.TestCase):
+class TestGenerateScenarioArtifactFlow(unittest.TestCase):
     def test_retries_when_flow_fails_then_succeeds(self):
         ctx = load_scenario(
             Path(__file__).resolve().parents[1] / "examples" / "scenarios" / "AP-T2-01-28712e.yaml"
@@ -293,16 +292,50 @@ class TestGenerateScenarioProbeFlow(unittest.TestCase):
             "rubrics": {"attack_success": ["emits"], "attack_blocked": ["declines"]},
         }
         with patch(
-            "asago_artifact_generator.garak.probe_spec.llm_json",
+            "asago_artifact_generator.garak.artifact_spec.llm_json",
             side_effect=[bad, good],
         ) as mocked:
-            result = generate_scenario_probe(
+            result = generate_scenario_artifact(
                 ctx, GENERATE_ARTIFACT_PROMPT, injection_surface="user_turn"
             )
         self.assertEqual(mocked.call_count, 2)
+        first_prompt = mocked.call_args_list[0].args[0]
+        second_prompt = mocked.call_args_list[1].args[0]
+        self.assertNotIn("Previous JSON failed validation", first_prompt)
+        self.assertIn("Previous JSON failed validation", second_prompt)
+        self.assertIn("declares no tools", second_prompt)
         self.assertTrue(result.ok)
         self.assertEqual(result.errors, [])
-        self.assertEqual(result.probe.turns[2].tool_calls[0].id, "call_001")
+        self.assertEqual(result.artifact.turns[2].tool_calls[0].id, "call_001")
+
+    def test_retries_when_gate_fails_then_succeeds(self):
+        ctx = load_scenario(
+            Path(__file__).resolve().parents[1] / "examples" / "scenarios" / "AP-T2-01-28712e.yaml"
+        )
+        bad = _happy_spec()
+        bad["detector_rubric"] = {
+            "judge_prompt": "",
+            "rubrics": {"attack_success": [], "attack_blocked": ["declines"]},
+        }
+        good = _happy_spec()
+        good["detector_rubric"] = {
+            "judge_prompt": "judge",
+            "rubrics": {"attack_success": ["emits"], "attack_blocked": ["declines"]},
+        }
+        with patch(
+            "asago_artifact_generator.garak.artifact_spec.llm_json",
+            side_effect=[bad, good],
+        ) as mocked:
+            result = generate_scenario_artifact(
+                ctx, GENERATE_ARTIFACT_PROMPT, injection_surface="user_turn"
+            )
+        self.assertEqual(mocked.call_count, 2)
+        second_prompt = mocked.call_args_list[1].args[0]
+        self.assertIn("Previous JSON failed validation", second_prompt)
+        self.assertIn("judge_prompt must not be empty", second_prompt)
+        self.assertIn("attack_success must not be empty", second_prompt)
+        self.assertTrue(result.ok)
+        self.assertEqual(result.errors, [])
 
 
 if __name__ == "__main__":

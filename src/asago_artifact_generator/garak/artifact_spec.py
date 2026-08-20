@@ -1,4 +1,4 @@
-"""One-shot probe generation from full scenario YAML (generate_artifact.md)."""
+"""One-shot Garak artifact generation from full scenario YAML (generate_artifact.md)."""
 
 from __future__ import annotations
 
@@ -22,9 +22,10 @@ log = logging.getLogger(__name__)
 GENERATE_ARTIFACT_PROMPT = Path(__file__).resolve().parent / "prompts" / "generate_artifact.md"
 
 TOOL_DECL = re.compile(r"^- (\w+)\(", re.M)
+MAX_GENERATION_ATTEMPTS = 3
 
-PROBE_VALIDATION_CHECKS = (
-    "Probe structural gate after LLM generation: validate_tool_flow checks Chat "
+ARTIFACT_VALIDATION_CHECKS = (
+    "Artifact structural gate after LLM generation: validate_tool_flow checks Chat "
     "Completions tool pairing (tool_calls immediately followed by matching role=tool "
     "turns), '- name(params):' tool declarations on the system turn, called names "
     "subseteq declared names, last-turn injection role, adversarial last turn, and "
@@ -41,11 +42,16 @@ SKIP_VALIDATION_CHECKS = (
 
 ARTIFACT_DISCLOSURE = "This artifact contains AI generated content"
 
+_LLM_SYSTEM = (
+    "You convert threat scenarios into Garak artifact JSON "
+    "(transcript turns plus detector_rubric). Respond with valid JSON only."
+)
+
 
 def validate_tool_flow(spec: dict) -> list[str]:
-    """Structural checks on raw LLM probe JSON, before metadata merge."""
+    """Structural checks on raw LLM artifact JSON, before metadata merge."""
     if not isinstance(spec, dict):
-        return ["probe spec must be an object"]
+        return ["artifact must be an object"]
     turns = spec.get("turns")
     if not isinstance(turns, list) or not turns:
         return ["turns must not be empty"]
@@ -132,7 +138,7 @@ class ToolCall(BaseModel):
     function: ToolCallFunction
 
 
-class ProbeTurn(BaseModel):
+class ArtifactTurn(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str = ""
     tool_name: str = ""
@@ -147,7 +153,7 @@ class ProbeTurn(BaseModel):
         return value or []
 
     @model_validator(mode="after")
-    def _alias_tool_identity(self) -> ProbeTurn:
+    def _alias_tool_identity(self) -> ArtifactTurn:
         if self.role == "tool":
             if self.name and not self.tool_name:
                 self.tool_name = self.name
@@ -162,16 +168,15 @@ class DetectorRubric(BaseModel):
     rubrics: dict[str, list[str]] = Field(default_factory=dict)
 
 
-class ScenarioProbe(BaseModel):
+class ScenarioArtifact(BaseModel):
     scenario_id: str = ""
-    probe_name: str = ""
     injection_surface: Literal["user_turn", "tool_return", "system_prompt"] = "user_turn"
-    turns: list[ProbeTurn] = Field(default_factory=list)
+    turns: list[ArtifactTurn] = Field(default_factory=list)
     attack_turn_index: int = Field(ge=0)
     detector_rubric: DetectorRubric = Field(default_factory=DetectorRubric)
 
     @model_validator(mode="after")
-    def _validate_transcript(self) -> ScenarioProbe:
+    def _validate_transcript(self) -> ScenarioArtifact:
         if not self.turns:
             raise ValueError("turns must not be empty")
         for i, turn in enumerate(self.turns):
@@ -183,8 +188,8 @@ class ScenarioProbe(BaseModel):
 
 
 @dataclass
-class ProbeBuildResult:
-    probe: ScenarioProbe
+class ArtifactBuildResult:
+    artifact: ScenarioArtifact
     ok: bool
     errors: list[str]
 
@@ -222,7 +227,7 @@ def _artifact_header(
 
 
 def skip_to_artifact_dict(ctx: ScenarioContext) -> dict[str, Any]:
-    """Minimal artifact for scenarios Garak cannot cover (no LLM, no probe)."""
+    """Minimal artifact for scenarios Garak cannot cover (no LLM)."""
     return _artifact_header(
         ctx,
         injection_surface=lookup_surface(ctx),
@@ -231,7 +236,7 @@ def skip_to_artifact_dict(ctx: ScenarioContext) -> dict[str, Any]:
     )
 
 
-def _turn_to_artifact(t: ProbeTurn) -> dict[str, Any]:
+def _turn_to_artifact(t: ArtifactTurn) -> dict[str, Any]:
     turn: dict[str, Any] = {
         "role": t.role,
         "content": t.content,
@@ -249,24 +254,24 @@ def _turn_to_artifact(t: ProbeTurn) -> dict[str, Any]:
     return turn
 
 
-def probe_to_artifact_dict(
+def artifact_to_dict(
     ctx: ScenarioContext,
-    probe: ScenarioProbe,
+    artifact: ScenarioArtifact,
     *,
     platform_coverage: str,
 ) -> dict[str, Any]:
-    """Serialize probe to the Garak artifact dict."""
+    """Serialize the generated spec to the on-disk Garak artifact dict."""
     header = _artifact_header(
         ctx,
-        injection_surface=probe.injection_surface,
+        injection_surface=artifact.injection_surface,
         platform_coverage=platform_coverage,
         model=llm_mod.MODEL,
     )
     return {
         **header,
-        "turns": [_turn_to_artifact(t) for t in probe.turns],
-        "attack_turn_index": probe.attack_turn_index,
-        "detector_rubric": probe.detector_rubric.model_dump(),
+        "turns": [_turn_to_artifact(t) for t in artifact.turns],
+        "attack_turn_index": artifact.attack_turn_index,
+        "detector_rubric": artifact.detector_rubric.model_dump(),
     }
 
 
@@ -277,13 +282,13 @@ def _fill(template: str, **slots: str) -> str:
     return out
 
 
-def gate_probe_errors(
-    probe: ScenarioProbe,
+def gate_artifact_errors(
+    artifact: ScenarioArtifact,
     *,
     expected_surface: str | None = None,
 ) -> list[str]:
     errors: list[str] = []
-    dr = probe.detector_rubric
+    dr = artifact.detector_rubric
     if not dr.judge_prompt.strip():
         errors.append("detector_rubric.judge_prompt must not be empty")
     success = dr.rubrics.get("attack_success") or []
@@ -292,80 +297,96 @@ def gate_probe_errors(
         errors.append("detector_rubric.rubrics.attack_success must not be empty")
     if not blocked:
         errors.append("detector_rubric.rubrics.attack_blocked must not be empty")
-    if expected_surface and probe.injection_surface != expected_surface:
+    if expected_surface and artifact.injection_surface != expected_surface:
         errors.append(
-            f"injection_surface must be {expected_surface!r}, got {probe.injection_surface!r}"
+            f"injection_surface must be {expected_surface!r}, got {artifact.injection_surface!r}"
         )
-    last = probe.turns[-1]
+    last = artifact.turns[-1]
     if expected_surface == "user_turn" and last.role != "user":
-        errors.append("user_turn probe must end with role=user")
+        errors.append("user_turn artifact must end with role=user")
     if expected_surface == "tool_return" and last.role != "tool":
-        errors.append("tool_return probe must end with role=tool")
+        errors.append("tool_return artifact must end with role=tool")
     if expected_surface == "system_prompt" and last.role != "system":
-        errors.append("system_prompt probe must end with role=system")
+        errors.append("system_prompt artifact must end with role=system")
     return errors
 
 
-def generate_scenario_probe(
+def _feedback_block(errors: list[str]) -> str:
+    lines = "\n".join(f"- {e}" for e in errors)
+    return (
+        "\n\nPrevious JSON failed validation. Fix these issues and emit a "
+        "complete new JSON object:\n" + lines
+    )
+
+
+def generate_scenario_artifact(
     ctx: ScenarioContext,
     prompt_path: Path,
     *,
     injection_surface: str | None = None,
-) -> ProbeBuildResult:
+) -> ArtifactBuildResult:
     surface = injection_surface or lookup_surface(ctx)
     template = prompt_path.read_text(encoding="utf-8")
-    prompt = _fill(
+    base_prompt = _fill(
         template,
         scenario_yaml=scenario_to_yaml(ctx),
         injection_surface=surface,
     )
     log.info(
-        "Generating scenario probe with %s (injection_surface=%s)",
+        "Generating scenario artifact with %s (injection_surface=%s)",
         prompt_path,
         surface,
     )
 
-    probe: ScenarioProbe | None = None
+    artifact: ScenarioArtifact | None = None
     last_error: Exception | None = None
     last_data: dict[str, Any] | None = None
-    last_flow: list[str] = []
+    last_errors: list[str] = []
+    feedback = ""
 
-    for attempt in range(3):
+    for attempt in range(MAX_GENERATION_ATTEMPTS):
+        user_prompt = base_prompt + feedback
         try:
-            data = llm_json(
-                prompt,
-                (
-                    "You convert threat scenarios into Garak probe JSON. "
-                    "Respond with valid JSON only."
-                ),
-            )
+            data = llm_json(user_prompt, _LLM_SYSTEM)
             if not isinstance(data, dict):
                 raise ValueError("LLM did not return a JSON object")
             last_data = data
-            last_flow = validate_tool_flow(data)
-            if last_flow:
+            errors = validate_tool_flow(data)
+            parsed: ScenarioArtifact | None = None
+            if not errors:
+                parsed = ScenarioArtifact.model_validate(data)
+                errors = gate_artifact_errors(parsed, expected_surface=surface)
+            last_errors = errors
+            if errors:
                 log.warning(
-                    "Probe flow validation attempt %d failed: %s",
+                    "Artifact validation attempt %d failed: %s",
                     attempt + 1,
-                    "; ".join(last_flow),
+                    "; ".join(errors),
                 )
+                feedback = _feedback_block(errors)
+                if parsed is not None:
+                    artifact = parsed
                 continue
-            probe = ScenarioProbe.model_validate(data)
+            artifact = parsed
+            last_errors = []
             break
         except Exception as e:
             last_error = e
-            log.warning("Probe generation attempt %d failed: %s", attempt + 1, e)
+            log.warning("Artifact generation attempt %d failed: %s", attempt + 1, e)
+            feedback = _feedback_block([str(e)])
 
-    if probe is None:
+    if artifact is None:
         if last_data is not None:
             try:
-                probe = ScenarioProbe.model_validate(last_data)
+                artifact = ScenarioArtifact.model_validate(last_data)
+                last_errors = validate_tool_flow(last_data) + gate_artifact_errors(
+                    artifact, expected_surface=surface
+                )
             except Exception as e:
                 raise last_error or e from e
         else:
-            raise last_error or RuntimeError("Probe generation failed") from None
+            raise last_error or RuntimeError("Artifact generation failed") from None
 
-    errors = list(last_flow) + gate_probe_errors(probe, expected_surface=surface)
-    if errors:
-        log.warning("Probe gate failed: %s", "; ".join(errors))
-    return ProbeBuildResult(probe=probe, ok=not errors, errors=errors)
+    if last_errors:
+        log.warning("Artifact validation failed: %s", "; ".join(last_errors))
+    return ArtifactBuildResult(artifact=artifact, ok=not last_errors, errors=last_errors)

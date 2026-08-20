@@ -7,16 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..extract import ScenarioContext
-from .classify import lookup_surface, surface_skip_reason
-from .gate import gate_from_context
-from .probe_spec import (
+from .artifact_spec import (
+    ARTIFACT_VALIDATION_CHECKS,
     GENERATE_ARTIFACT_PROMPT,
-    PROBE_VALIDATION_CHECKS,
     SKIP_VALIDATION_CHECKS,
-    generate_scenario_probe,
-    probe_to_artifact_dict,
+    artifact_to_dict,
+    generate_scenario_artifact,
     skip_to_artifact_dict,
 )
+from .classify import lookup_surface, surface_skip_reason
+from .gate import gate_from_context
 from .spec_io import (
     runs_dir,
     save_garak_artifact,
@@ -68,7 +68,7 @@ def generate_artifact(
     """Scenario YAML → runs/{scenario_id}/{scenario_id}-garak.json.
     ``gate`` is Garak coverage (full / partial / skip)
     ``ok`` / ``errors`` are structural validation.
-    ``force`` only controls whether an invalid probe JSON is written.
+    ``force`` only controls whether an invalid artifact JSON is written.
     """
     prompt = prompt_path or GENERATE_ARTIFACT_PROMPT
     out_base = runs_dir(output_dir)
@@ -114,49 +114,49 @@ def generate_artifact(
             errors=["Artifact generation requires LLM (omit --no-llm)"],
         )
 
-    probe_result = generate_scenario_probe(ctx, prompt, injection_surface=injection_surface)
+    build = generate_scenario_artifact(ctx, prompt, injection_surface=injection_surface)
     save_validation(
         ctx.scenario_id,
-        probe_result.ok,
-        probe_result.errors,
+        build.ok,
+        build.errors,
         out_base,
-        checks=PROBE_VALIDATION_CHECKS,
+        checks=ARTIFACT_VALIDATION_CHECKS,
     )
 
-    if not probe_result.ok:
-        log.warning("Probe validation failed for %s: %s", ctx.scenario_id, probe_result.errors)
+    if not build.ok:
+        log.warning("Artifact validation failed for %s: %s", ctx.scenario_id, build.errors)
         if not force:
             return GenResult(
                 scenario_id=ctx.scenario_id,
                 ok=False,
                 gate=gate_result,
                 gate_reason=gate_reason,
-                errors=probe_result.errors,
+                errors=build.errors,
             )
 
     if dry_run:
         log.info("DRY-RUN %s — gate=%s (%s)", ctx.scenario_id, gate_result, gate_reason)
         return GenResult(
             scenario_id=ctx.scenario_id,
-            ok=probe_result.ok,
+            ok=build.ok,
             gate=gate_result,
             gate_reason=gate_reason,
-            errors=probe_result.errors if probe_result.errors else None,
+            errors=build.errors if build.errors else None,
         )
 
     artifact_path = save_garak_artifact(
         ctx.scenario_id,
-        probe_to_artifact_dict(ctx, probe_result.probe, platform_coverage=gate_result),
+        artifact_to_dict(ctx, build.artifact, platform_coverage=gate_result),
         out_base,
     )
     log.info("DONE %s → %s", ctx.scenario_id, artifact_path.name)
     return GenResult(
         scenario_id=ctx.scenario_id,
-        ok=probe_result.ok,
+        ok=build.ok,
         gate=gate_result,
         gate_reason=gate_reason,
         artifact_path=str(artifact_path),
-        errors=probe_result.errors if probe_result.errors else None,
+        errors=build.errors if build.errors else None,
     )
 
 

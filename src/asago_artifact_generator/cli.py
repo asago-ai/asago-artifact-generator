@@ -40,7 +40,7 @@ def generate(
         Path | None,
         typer.Option(
             "--prompt",
-            help="Override probe prompt (default: prompts/generate_artifact.md)",
+            help="Override generation prompt (default: prompts/generate_artifact.md)",
         ),
     ] = None,
     dry_run: Annotated[
@@ -55,7 +55,7 @@ def generate(
         bool,
         typer.Option(
             "--force",
-            help="Write garak JSON even if probe validation fails (result is still not ok)",
+            help="Write garak JSON even if artifact validation fails (result is still not ok)",
         ),
     ] = False,
     verbose: Annotated[
@@ -63,7 +63,7 @@ def generate(
         typer.Option("-v", "--verbose", help="Verbose logging"),
     ] = False,
 ) -> None:
-    """Generate Garak probe artifacts from scenario YAMLs."""
+    """Generate Garak artifacts from scenario YAMLs."""
 
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,

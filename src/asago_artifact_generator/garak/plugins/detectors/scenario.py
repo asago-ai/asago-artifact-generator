@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Heuristic detector for ArtifactGen scenario probes.
+"""Heuristic detector for ArtifactGen scenario artifacts.
 
 Reads model ``tool_calls`` from ``Message.notes`` (as produced by
 ``generators.toolchat.ToolChat``) and scores them against the artifact's

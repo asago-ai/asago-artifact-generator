@@ -6,12 +6,12 @@ import unittest
 from pathlib import Path
 
 from asago_artifact_generator.extract import extract_scenario, load_scenario
+from asago_artifact_generator.garak.artifact_spec import skip_to_artifact_dict
 from asago_artifact_generator.garak.classify import (
     classify_garak,
     lookup_surface,
     surface_skip_reason,
 )
-from asago_artifact_generator.garak.probe_spec import skip_to_artifact_dict
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "examples" / "scenarios"
 

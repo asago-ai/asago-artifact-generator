@@ -9,24 +9,23 @@ from pathlib import Path
 from unittest.mock import patch
 
 from asago_artifact_generator.extract import load_scenario
-from asago_artifact_generator.garak.gen import generate_artifact
-from asago_artifact_generator.garak.probe_spec import (
+from asago_artifact_generator.garak.artifact_spec import (
+    ArtifactBuildResult,
+    ArtifactTurn,
     DetectorRubric,
-    ProbeBuildResult,
-    ProbeTurn,
-    ScenarioProbe,
+    ScenarioArtifact,
 )
+from asago_artifact_generator.garak.gen import generate_artifact
 
 
-def _failed_probe(ctx) -> ProbeBuildResult:
-    probe = ScenarioProbe(
+def _failed_build(ctx) -> ArtifactBuildResult:
+    spec = ScenarioArtifact(
         scenario_id=ctx.scenario_id,
-        probe_name="test",
         injection_surface="user_turn",
         turns=[
-            ProbeTurn(role="system", content="- lookup_order(order_id): lookup"),
-            ProbeTurn(role="user", content="hi"),
-            ProbeTurn(role="assistant", content="done", adversarial=True),
+            ArtifactTurn(role="system", content="- lookup_order(order_id): lookup"),
+            ArtifactTurn(role="user", content="hi"),
+            ArtifactTurn(role="assistant", content="done", adversarial=True),
         ],
         attack_turn_index=2,
         detector_rubric=DetectorRubric(
@@ -34,8 +33,8 @@ def _failed_probe(ctx) -> ProbeBuildResult:
             rubrics={"attack_success": ["s"], "attack_blocked": ["b"]},
         ),
     )
-    return ProbeBuildResult(
-        probe=probe,
+    return ArtifactBuildResult(
+        artifact=spec,
         ok=False,
         errors=[
             "turn 5: 1 call(s) not immediately followed by 1 tool turn(s)",
@@ -49,12 +48,12 @@ class TestGenerateArtifactForce(unittest.TestCase):
         self.ctx = load_scenario(
             Path(__file__).resolve().parents[1] / "examples" / "scenarios" / "AP-T2-01-28712e.yaml"
         )
-        self.failed = _failed_probe(self.ctx)
+        self.failed = _failed_build(self.ctx)
 
     def test_force_writes_artifact_but_coverage_unchanged(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch(
-                "asago_artifact_generator.garak.gen.generate_scenario_probe",
+                "asago_artifact_generator.garak.gen.generate_scenario_artifact",
                 return_value=self.failed,
             ):
                 result = generate_artifact(self.ctx, output_dir=Path(tmp), force=True)
@@ -62,17 +61,17 @@ class TestGenerateArtifactForce(unittest.TestCase):
             self.assertEqual(result.gate, "full")
             self.assertEqual(result.gate_reason, "fully supported")
             self.assertIsNotNone(result.artifact_path)
-            artifact = Path(result.artifact_path)
-            self.assertTrue(artifact.is_file())
-            data = json.loads(artifact.read_text())
+            path = Path(result.artifact_path)
+            self.assertTrue(path.is_file())
+            data = json.loads(path.read_text())
             self.assertEqual(data["platform_coverage"], "full")
-            validation = json.loads((artifact.parent / "validation.json").read_text())
+            validation = json.loads((path.parent / "validation.json").read_text())
             self.assertFalse(validation["ok"])
 
     def test_without_force_keeps_coverage_and_does_not_write_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch(
-                "asago_artifact_generator.garak.gen.generate_scenario_probe",
+                "asago_artifact_generator.garak.gen.generate_scenario_artifact",
                 return_value=self.failed,
             ):
                 result = generate_artifact(self.ctx, output_dir=Path(tmp), force=False)

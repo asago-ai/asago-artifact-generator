@@ -1,4 +1,4 @@
-"""Post-generation Garak feasibility gate."""
+"""Post-generation Garak coverage gate."""
 
 from __future__ import annotations
 

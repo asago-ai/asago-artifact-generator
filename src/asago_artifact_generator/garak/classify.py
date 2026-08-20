@@ -88,7 +88,7 @@ def classify_garak(
     oracle_kind: str = "forbidden_call",
     tools_grounded: bool = True,
 ) -> tuple[GateResult, str]:
-    """Return (gate_result, reason) after probe generation — full / partial / skip."""
+    """Return (gate_result, reason) — full / partial / skip."""
     sid = ctx.seed_id or ctx.scenario_id
     surf = surface or lookup_surface(ctx)
 

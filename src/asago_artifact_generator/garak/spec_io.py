@@ -1,4 +1,4 @@
-"""Load/save Garak probe outputs under runs/{scenario_id}/."""
+"""Load/save Garak artifacts under runs/{scenario_id}/."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def save_validation(
 
 
 def load_garak_artifact(path: str | Path) -> dict[str, Any]:
-    """Load a Garak probe artifact from JSON (or legacy YAML)."""
+    """Load a Garak artifact from JSON (or legacy YAML)."""
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"Garak artifact not found: {p}")

@@ -22,7 +22,7 @@ via `.env` or environment variables.
 - `src/asago_artifact_generator/` contains shared domain models, the LLM
   client, and the `typer` CLI.
 - `src/asago_artifact_generator/garak/` contains the Garak platform generator:
-  classification, gating, probe specification, artifact I/O, prompt templates,
+  classification, gating, artifact specification, artifact I/O, prompt templates,
   and Garak plugin sources (probe + detector).
 - `examples/scenarios/` contains committed input scenario YAMLs.
 - `examples/demo/` contains the interactive Jupyter walkthrough and runtime.

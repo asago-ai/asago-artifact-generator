@@ -1,4 +1,4 @@
-"""Probe path and serialization tests."""
+"""Artifact path and serialization tests."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from pathlib import Path
 
 import asago_artifact_generator.llm as llm_mod
 from asago_artifact_generator.extract import ScenarioContext, load_scenario
-from asago_artifact_generator.garak.probe_spec import (
+from asago_artifact_generator.garak.artifact_spec import (
     ARTIFACT_DISCLOSURE,
-    PROBE_VALIDATION_CHECKS,
+    ARTIFACT_VALIDATION_CHECKS,
+    ArtifactTurn,
     DetectorRubric,
-    ProbeTurn,
-    ScenarioProbe,
-    gate_probe_errors,
-    probe_to_artifact_dict,
+    ScenarioArtifact,
+    artifact_to_dict,
+    gate_artifact_errors,
     skip_to_artifact_dict,
 )
 from asago_artifact_generator.garak.spec_io import (
@@ -26,7 +26,7 @@ from asago_artifact_generator.garak.spec_io import (
 )
 
 
-class TestProbeArtifact(unittest.TestCase):
+class TestGarakArtifact(unittest.TestCase):
     def _minimal_ctx(self) -> ScenarioContext:
         return load_scenario(
             Path(__file__).resolve().parents[1] / "examples" / "scenarios" / "AP-T2-01-28712e.yaml"
@@ -60,7 +60,7 @@ class TestProbeArtifact(unittest.TestCase):
             True,
             [],
             Path("runs"),
-            checks=PROBE_VALIDATION_CHECKS,
+            checks=ARTIFACT_VALIDATION_CHECKS,
         )
         data = json.loads(path.read_text())
         self.assertTrue(data["ok"])
@@ -117,22 +117,21 @@ class TestProbeArtifact(unittest.TestCase):
 
     def test_scenario_to_yaml_strips_narrative(self):
         ctx = self._minimal_ctx()
-        from asago_artifact_generator.garak.probe_spec import scenario_to_yaml
+        from asago_artifact_generator.garak.artifact_spec import scenario_to_yaml
 
         prompt_yaml = scenario_to_yaml(ctx)
         self.assertNotIn("narrative:", prompt_yaml)
         full_yaml = scenario_to_yaml(ctx, include_narrative=True)
         self.assertIn("narrative:", full_yaml)
 
-    def test_probe_to_artifact_dict_shape(self):
+    def test_artifact_to_dict_shape(self):
         ctx = self._minimal_ctx()
-        probe = ScenarioProbe(
+        artifact = ScenarioArtifact(
             scenario_id=ctx.scenario_id,
-            probe_name="test_probe",
             injection_surface="user_turn",
             turns=[
-                ProbeTurn(role="system", content="sys"),
-                ProbeTurn(role="user", content="attack", adversarial=True),
+                ArtifactTurn(role="system", content="sys"),
+                ArtifactTurn(role="user", content="attack", adversarial=True),
             ],
             attack_turn_index=1,
             detector_rubric=DetectorRubric(
@@ -140,7 +139,7 @@ class TestProbeArtifact(unittest.TestCase):
                 rubrics={"attack_success": ["emits refund"], "attack_blocked": ["declines"]},
             ),
         )
-        data = probe_to_artifact_dict(ctx, probe, platform_coverage="full")
+        data = artifact_to_dict(ctx, artifact, platform_coverage="full")
         self.assertEqual(data["scenario_id"], ctx.scenario_id)
         self.assertEqual(data["injection_surface"], "user_turn")
         self.assertEqual(list(data["narrative"].keys()), ["summary"])
@@ -152,15 +151,14 @@ class TestProbeArtifact(unittest.TestCase):
         self.assertNotIn("probe_name", data)
         self.assertNotIn("metadata", data)
 
-    def test_probe_to_artifact_dict_omits_empty_tool_name(self):
+    def test_artifact_to_dict_omits_empty_tool_name(self):
         ctx = self._minimal_ctx()
-        probe = ScenarioProbe(
+        artifact = ScenarioArtifact(
             scenario_id="AP-T2-01-test",
-            probe_name="test_probe",
             injection_surface="user_turn",
             turns=[
-                ProbeTurn(role="system", content="sys"),
-                ProbeTurn(role="user", content="attack", adversarial=True),
+                ArtifactTurn(role="system", content="sys"),
+                ArtifactTurn(role="user", content="attack", adversarial=True),
             ],
             attack_turn_index=1,
             detector_rubric=DetectorRubric(
@@ -168,25 +166,24 @@ class TestProbeArtifact(unittest.TestCase):
                 rubrics={"attack_success": ["emits refund"], "attack_blocked": ["declines"]},
             ),
         )
-        data = probe_to_artifact_dict(ctx, probe, platform_coverage="partial")
+        data = artifact_to_dict(ctx, artifact, platform_coverage="partial")
         self.assertNotIn("tool_name", data["turns"][0])
         self.assertEqual(data["attack_turn_index"], 1)
         self.assertIn("detector_rubric", data)
 
-    def test_probe_to_artifact_dict_uses_live_configured_model(self):
+    def test_artifact_to_dict_uses_live_configured_model(self):
         from asago_artifact_generator.llm import configure_llm
 
         prev = (llm_mod.PROVIDER, llm_mod.BASE_URL, llm_mod.MODEL)
         self.addCleanup(lambda: configure_llm(provider=prev[0], base_url=prev[1], model=prev[2]))
         configure_llm(provider="openai", model="gemma-4-26b")
         ctx = self._minimal_ctx()
-        probe = ScenarioProbe(
+        artifact = ScenarioArtifact(
             scenario_id=ctx.scenario_id,
-            probe_name="test_probe",
             injection_surface="user_turn",
             turns=[
-                ProbeTurn(role="system", content="sys"),
-                ProbeTurn(role="user", content="attack", adversarial=True),
+                ArtifactTurn(role="system", content="sys"),
+                ArtifactTurn(role="user", content="attack", adversarial=True),
             ],
             attack_turn_index=1,
             detector_rubric=DetectorRubric(
@@ -194,18 +191,17 @@ class TestProbeArtifact(unittest.TestCase):
                 rubrics={"attack_success": ["emits refund"], "attack_blocked": ["declines"]},
             ),
         )
-        data = probe_to_artifact_dict(ctx, probe, platform_coverage="full")
+        data = artifact_to_dict(ctx, artifact, platform_coverage="full")
         self.assertEqual(data["model"], "gemma-4-26b")
         self.assertEqual(data["model"], llm_mod.MODEL)
 
     def test_gate_rejects_surface_mismatch(self):
-        probe = ScenarioProbe(
+        artifact = ScenarioArtifact(
             scenario_id="AP-T11-02-test",
-            probe_name="test",
             injection_surface="user_turn",
             turns=[
-                ProbeTurn(role="system", content="sys"),
-                ProbeTurn(role="user", content="attack", adversarial=True),
+                ArtifactTurn(role="system", content="sys"),
+                ArtifactTurn(role="user", content="attack", adversarial=True),
             ],
             attack_turn_index=1,
             detector_rubric=DetectorRubric(
@@ -213,17 +209,16 @@ class TestProbeArtifact(unittest.TestCase):
                 rubrics={"attack_success": ["emits"], "attack_blocked": ["declines"]},
             ),
         )
-        errors = gate_probe_errors(probe, expected_surface="tool_return")
+        errors = gate_artifact_errors(artifact, expected_surface="tool_return")
         self.assertTrue(any("injection_surface" in e for e in errors))
 
     def test_gate_requires_tool_role_for_tool_return(self):
-        probe = ScenarioProbe(
+        artifact = ScenarioArtifact(
             scenario_id="AP-T11-02-test",
-            probe_name="test",
             injection_surface="tool_return",
             turns=[
-                ProbeTurn(role="system", content="sys"),
-                ProbeTurn(role="user", content="attack", adversarial=True),
+                ArtifactTurn(role="system", content="sys"),
+                ArtifactTurn(role="user", content="attack", adversarial=True),
             ],
             attack_turn_index=1,
             detector_rubric=DetectorRubric(
@@ -231,8 +226,8 @@ class TestProbeArtifact(unittest.TestCase):
                 rubrics={"attack_success": ["emits"], "attack_blocked": ["declines"]},
             ),
         )
-        errors = gate_probe_errors(probe, expected_surface="tool_return")
-        self.assertIn("tool_return probe must end with role=tool", errors)
+        errors = gate_artifact_errors(artifact, expected_surface="tool_return")
+        self.assertIn("tool_return artifact must end with role=tool", errors)
 
 
 if __name__ == "__main__":

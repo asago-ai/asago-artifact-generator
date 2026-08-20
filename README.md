@@ -28,7 +28,7 @@ Supported LLM backends: **Gemini** (default when `GEMINI_API_KEY` is set), **Ope
 
 1. **Classify** the injection surface from `narrative.entry_point` (`input` → `user_turn`, `tool_execution` → `tool_return`). Supply chain threats (`threat_name`) skip with no coverage.
 2. **Skip** surfaces the target platform cannot express (including supply chain).
-3. **Generate** a red-teaming artifact for that platform (transcript, probe, or equivalent).
+3. **Generate** a red-teaming artifact for that platform (transcript + detector rubric).
 4. **Validate** deos the artifact pass all checks (`ok` / `errors`). 
 5. **Gate** platform coverage: `full`, `partial`, or `skip`.
 
@@ -65,7 +65,7 @@ asago-artifact-generator generate -v
 
 1. **Classify** injection surface from `narrative.entry_point` (`input` → `user_turn`, `tool_execution` → `tool_return`). `threat_name` containing “supply chain” is `none` (no coverage).
 2. **Skip** unwritable surfaces (supply chain / `none`) — writes a minimal artifact without calling the LLM.
-3. **Generate** probe via one-shot LLM (`prompts/generate_artifact.md`).
+3. **Generate** artifact via one-shot LLM (`prompts/generate_artifact.md`).
 4. **Validate** structural gates (rubric completeness, surface/turn alignment, schema). 
 5. **Gate** platform coverage: `full`, `partial`, or `skip` .
 
@@ -77,11 +77,11 @@ Each scenario gets its own directory under `runs/`:
 runs/
   manifest.json
   AP-T2-01-28712e/
-    AP-T2-01-28712e-garak.json    # probe artifact
+    AP-T2-01-28712e-garak.json    # Garak artifact
     validation.json               # structural gate result
 ```
 
-**`{scenario_id}-garak.json`** — probe artifact:
+**`{scenario_id}-garak.json`** — Garak artifact (transcript + detector predicates):
 
 - `scenario_id`, `injection_surface`, `platform_coverage` (`full` | `partial` | `null` for skips)
 - `narrative.summary`
@@ -96,7 +96,7 @@ runs/
 ```json
 {
   "ok": true,
-  "checks": "Probe structural gate after LLM generation: ...",
+  "checks": "Artifact structural gate after LLM generation: ...",
   "errors": []
 }
 ```
@@ -150,13 +150,13 @@ The unit test suite is deterministic and does not require an LLM endpoint.
 |--------|------|
 | `cli.py` | `typer` CLI — orchestrates classify → generate → validate → save |
 | `garak/gen.py` | Core generation logic for Garak artifacts |
-| `garak/probe_spec.py` | `ScenarioProbe` schema, LLM call, `gate_probe_errors`, artifact dicts |
+| `garak/artifact_spec.py` | `ScenarioArtifact` schema, LLM call, `gate_artifact_errors`, artifact dicts |
 | `garak/spec_io.py` | Paths and I/O for `runs/{id}/{id}-garak.json` and `validation.json` |
 | `garak/classify.py` | Injection-surface table, pre-plan skip, `platform_coverage` gates |
 | `extract.py` | Load scenario YAML into `ScenarioContext` |
-| `garak/gate.py` | `gate_from_context` — full vs partial vs skip after probe |
+| `garak/gate.py` | `gate_from_context` — full vs partial vs skip coverage |
 | `llm.py` | Provider-agnostic completion (Gemini / Ollama / OpenAI / HF / OpenRouter) |
-| `garak/prompts/generate_artifact.md` | One-shot probe generation prompt |
+| `garak/prompts/generate_artifact.md` | One-shot artifact generation prompt |
 
 ## License
 

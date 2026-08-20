@@ -1,1 +1,1 @@
-"""Garak probe artifact generation."""
+"""Garak artifact generation."""
