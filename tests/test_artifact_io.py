@@ -6,6 +6,7 @@ import json
 import unittest
 from pathlib import Path
 
+import asago_artifact_generator.llm as llm_mod
 from asago_artifact_generator.extract import ScenarioContext, load_scenario
 from asago_artifact_generator.garak.probe_spec import (
     ARTIFACT_DISCLOSURE,
@@ -23,7 +24,6 @@ from asago_artifact_generator.garak.spec_io import (
     scenario_id_from_garak_path,
     validation_path,
 )
-from asago_artifact_generator.llm import MODEL
 
 
 class TestProbeArtifact(unittest.TestCase):
@@ -147,7 +147,7 @@ class TestProbeArtifact(unittest.TestCase):
         self.assertIn("summary", data["narrative"])
         self.assertEqual(data["platform_coverage"], "full")
         self.assertEqual(data["disclosure"], ARTIFACT_DISCLOSURE)
-        self.assertEqual(data["model"], MODEL)
+        self.assertEqual(data["model"], llm_mod.MODEL)
         self.assertRegex(data["timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
         self.assertNotIn("probe_name", data)
         self.assertNotIn("metadata", data)
@@ -172,6 +172,31 @@ class TestProbeArtifact(unittest.TestCase):
         self.assertNotIn("tool_name", data["turns"][0])
         self.assertEqual(data["attack_turn_index"], 1)
         self.assertIn("detector_rubric", data)
+
+    def test_probe_to_artifact_dict_uses_live_configured_model(self):
+        from asago_artifact_generator.llm import configure_llm
+
+        prev = (llm_mod.PROVIDER, llm_mod.BASE_URL, llm_mod.MODEL)
+        self.addCleanup(lambda: configure_llm(provider=prev[0], base_url=prev[1], model=prev[2]))
+        configure_llm(provider="openai", model="gemma-4-26b")
+        ctx = self._minimal_ctx()
+        probe = ScenarioProbe(
+            scenario_id=ctx.scenario_id,
+            probe_name="test_probe",
+            injection_surface="user_turn",
+            turns=[
+                ProbeTurn(role="system", content="sys"),
+                ProbeTurn(role="user", content="attack", adversarial=True),
+            ],
+            attack_turn_index=1,
+            detector_rubric=DetectorRubric(
+                judge_prompt="judge",
+                rubrics={"attack_success": ["emits refund"], "attack_blocked": ["declines"]},
+            ),
+        )
+        data = probe_to_artifact_dict(ctx, probe, platform_coverage="full")
+        self.assertEqual(data["model"], "gemma-4-26b")
+        self.assertEqual(data["model"], llm_mod.MODEL)
 
     def test_gate_rejects_surface_mismatch(self):
         probe = ScenarioProbe(

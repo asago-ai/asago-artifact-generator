@@ -53,7 +53,10 @@ def generate(
     ] = False,
     force: Annotated[
         bool,
-        typer.Option("--force", help="Write garak JSON even if probe validation fails"),
+        typer.Option(
+            "--force",
+            help="Write garak JSON even if probe validation fails (result is still not ok)",
+        ),
     ] = False,
     verbose: Annotated[
         bool,
@@ -76,6 +79,7 @@ def generate(
 
     manifest: list[dict] = []
     counts = {"full": 0, "partial": 0, "skip": 0, "error": 0}
+    failed = False
 
     for path in paths:
         try:
@@ -90,6 +94,7 @@ def generate(
             )
             entry = {
                 "scenario_id": result.scenario_id,
+                "ok": result.ok,
                 "gate_result": result.gate,
                 "gate_reason": result.gate_reason,
                 "artifact_path": result.artifact_path,
@@ -98,16 +103,20 @@ def generate(
                 entry["errors"] = result.errors
             manifest.append(entry)
             counts[result.gate] += 1
+            if not result.ok:
+                failed = True
         except Exception as e:
             log.error("ERROR processing %s: %s", path.name, e)
             manifest.append(
                 {
                     "scenario_id": path.stem,
+                    "ok": False,
                     "gate_result": "error",
                     "error": str(e),
                 }
             )
             counts["error"] += 1
+            failed = True
 
     if not dry_run:
         out = runs_dir(output_dir)
@@ -133,7 +142,7 @@ def generate(
         reason = e.get("gate_reason", e.get("error", ""))
         print(f"{sid:<25} {gr:<8} {reason}")
 
-    if counts["error"] > 0:
+    if failed:
         raise typer.Exit(1)
 
 

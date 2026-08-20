@@ -12,8 +12,9 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .. import llm as llm_mod
 from ..extract import ScenarioContext
-from ..llm import MODEL, llm_json
+from ..llm import llm_json
 from .classify import lookup_surface
 
 log = logging.getLogger(__name__)
@@ -259,7 +260,7 @@ def probe_to_artifact_dict(
         ctx,
         injection_surface=probe.injection_surface,
         platform_coverage=platform_coverage,
-        model=MODEL,
+        model=llm_mod.MODEL,
     )
     return {
         **header,

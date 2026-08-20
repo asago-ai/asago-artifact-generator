@@ -131,9 +131,10 @@ def generate_artifact(
         log.info("DRY-RUN %s — gate=%s (%s)", ctx.scenario_id, gate_result, gate_reason)
         return GenResult(
             scenario_id=ctx.scenario_id,
-            ok=True,
+            ok=probe_result.ok,
             gate=gate_result,
             gate_reason=gate_reason,
+            errors=probe_result.errors if probe_result.errors else None,
         )
 
     artifact_path = save_garak_artifact(
@@ -144,7 +145,7 @@ def generate_artifact(
     log.info("DONE %s → %s", ctx.scenario_id, artifact_path.name)
     return GenResult(
         scenario_id=ctx.scenario_id,
-        ok=True,
+        ok=probe_result.ok,
         gate=gate_result,
         gate_reason=gate_reason,
         artifact_path=str(artifact_path),

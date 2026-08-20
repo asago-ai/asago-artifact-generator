@@ -55,7 +55,7 @@ asago-artifact-generator generate -v
 
 | Flag | Effect |
 |------|--------|
-| `--force` | Write garak JSON even when structural validation fails |
+| `--force` | Write garak JSON even when structural validation fails (`ok` stays false; the command still exits 1) |
 | `--dry-run` | Classify + LLM + validate only — no files written |
 | `--no-llm` | Skip LLM (useful to test pre-plan surface skips) |
 | `--output-dir DIR` | Override default `runs/` output directory |
