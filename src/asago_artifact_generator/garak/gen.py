@@ -66,8 +66,7 @@ def generate_artifact(
     dry_run: bool = False,
 ) -> GenResult:
     """Scenario YAML → runs/{scenario_id}/{scenario_id}-garak.json.
-
-    ``gate`` is Garak coverage (full / partial / skip) 
+    ``gate`` is Garak coverage (full / partial / skip)
     ``ok`` / ``errors`` are structural validation.
     ``force`` only controls whether an invalid probe JSON is written.
     """
