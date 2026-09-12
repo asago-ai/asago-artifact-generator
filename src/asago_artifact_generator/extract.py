@@ -16,6 +16,24 @@ def name_in_source(name: str, source_text: str) -> bool:
     return bool(name) and name.lower() in (source_text or "").lower()
 
 
+def behavior_spec_text(behavior_spec: Any) -> str:
+    """Flatten legacy strings and structured behavior_spec dictionaries to text.
+
+    A structured spec must carry its rendered gherkin_text (the authoritative
+    Gherkin rendering); shapes that are neither a string nor such a dict raise.
+    """
+    if isinstance(behavior_spec, str):
+        return behavior_spec
+    if behavior_spec is None:
+        return ""
+    if isinstance(behavior_spec, dict):
+        gherkin = behavior_spec.get("gherkin_text")
+        if isinstance(gherkin, str) and gherkin.strip():
+            return gherkin
+        raise ValueError("structured behavior_spec requires a non-empty gherkin_text")
+    raise ValueError(f"unsupported behavior_spec type: {type(behavior_spec).__name__}")
+
+
 def scenario_narrative_text(scenario: dict) -> str:
     narrative = scenario.get("narrative") or {}
     meta = scenario.get("scenario_seed_metadata") or {}
@@ -32,7 +50,7 @@ def scenario_narrative_text(scenario: dict) -> str:
         tree.get("goal", ""),
         risk.get("threat", ""),
         risk.get("consequence", ""),
-        scenario.get("behavior_spec", ""),
+        behavior_spec_text(scenario.get("behavior_spec", "")),
         scenario.get("_feature_text", ""),
     ]
 
@@ -190,5 +208,5 @@ def extract_scenario(scenario: dict[str, Any]) -> ScenarioContext:
         attack_tree_excerpt=scenario_attack_tree_excerpt(scenario),
         grounding_text=scenario_plan_grounding_text(scenario),
         quoted_tools=quoted_tool_names(scenario),
-        behavior_spec=str(scenario.get("behavior_spec", "")),
+        behavior_spec=behavior_spec_text(scenario.get("behavior_spec", "")),
     )
