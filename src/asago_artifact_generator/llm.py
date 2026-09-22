@@ -213,14 +213,49 @@ def fix_json(text: str) -> str:
         return text
 
 
+def _max_tokens() -> int | None:
+    """Return the optional completion limit from the environment."""
+    raw = os.environ.get("REDTEAM_MAX_TOKENS", "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("REDTEAM_MAX_TOKENS must be a positive integer") from exc
+    if value <= 0:
+        raise ValueError("REDTEAM_MAX_TOKENS must be a positive integer")
+    return value
+
+
+def _reasoning_effort() -> str | None:
+    """Return the optional reasoning effort for compatible providers."""
+    raw = os.environ.get("REDTEAM_REASONING_EFFORT", "").strip().lower()
+    if not raw:
+        return None
+    allowed = {"none", "low", "medium", "high", "max"}
+    if raw not in allowed:
+        values = ", ".join(sorted(allowed))
+        raise ValueError(f"REDTEAM_REASONING_EFFORT must be one of: {values}")
+    return raw
+
+
 def llm_json(prompt: str, system: str, *, temperature: float = 0.2) -> dict:
-    response = get_client().chat.completions.create(
-        model=MODEL,
-        temperature=temperature,
-        messages=[
+    request = {
+        "model": MODEL,
+        "temperature": temperature,
+        "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
+    }
+    max_tokens = _max_tokens()
+    if max_tokens is not None:
+        request["max_tokens"] = max_tokens
+    reasoning_effort = _reasoning_effort()
+    if reasoning_effort is not None:
+        request["reasoning_effort"] = reasoning_effort
+    response = get_client().chat.completions.create(
+        **request,
     )
     raw = response.choices[0].message.content.strip()
     return json.loads(fix_json(raw))
