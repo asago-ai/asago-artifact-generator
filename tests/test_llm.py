@@ -33,26 +33,53 @@ class TestLlmJson(unittest.TestCase):
         client = _FakeClient()
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("REDTEAM_MAX_TOKENS", None)
+            os.environ.pop("REDTEAM_MAX_COMPLETION_TOKENS", None)
             with patch.object(llm, "get_client", return_value=client):
                 result = llm.llm_json("prompt", "system")
 
         self.assertEqual(result, {"ok": True})
         self.assertNotIn("max_tokens", client.completions.kwargs)
+        self.assertNotIn("max_completion_tokens", client.completions.kwargs)
 
     def test_passes_configured_max_tokens(self):
         client = _FakeClient()
         with patch.dict(os.environ, {"REDTEAM_MAX_TOKENS": "16000"}):
+            os.environ.pop("REDTEAM_MAX_COMPLETION_TOKENS", None)
             with patch.object(llm, "get_client", return_value=client):
                 result = llm.llm_json("prompt", "system")
 
         self.assertEqual(result, {"ok": True})
         self.assertEqual(client.completions.kwargs["max_tokens"], 16000)
 
+    def test_passes_configured_max_completion_tokens(self):
+        client = _FakeClient()
+        with patch.dict(os.environ, {"REDTEAM_MAX_COMPLETION_TOKENS": "16000"}):
+            os.environ.pop("REDTEAM_MAX_TOKENS", None)
+            with patch.object(llm, "get_client", return_value=client):
+                result = llm.llm_json("prompt", "system")
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(client.completions.kwargs["max_completion_tokens"], 16000)
+        self.assertNotIn("max_tokens", client.completions.kwargs)
+
     def test_rejects_invalid_max_tokens(self):
         client = _FakeClient()
         with patch.dict(os.environ, {"REDTEAM_MAX_TOKENS": "not-a-number"}):
             with patch.object(llm, "get_client", return_value=client):
                 with self.assertRaisesRegex(ValueError, "positive integer"):
+                    llm.llm_json("prompt", "system")
+
+        self.assertIsNone(client.completions.kwargs)
+
+    def test_rejects_both_completion_limit_parameters(self):
+        client = _FakeClient()
+        env = {
+            "REDTEAM_MAX_TOKENS": "16000",
+            "REDTEAM_MAX_COMPLETION_TOKENS": "16000",
+        }
+        with patch.dict(os.environ, env):
+            with patch.object(llm, "get_client", return_value=client):
+                with self.assertRaisesRegex(ValueError, "only one"):
                     llm.llm_json("prompt", "system")
 
         self.assertIsNone(client.completions.kwargs)

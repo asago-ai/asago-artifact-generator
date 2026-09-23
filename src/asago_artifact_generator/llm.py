@@ -213,18 +213,31 @@ def fix_json(text: str) -> str:
         return text
 
 
-def _max_tokens() -> int | None:
-    """Return the optional completion limit from the environment."""
-    raw = os.environ.get("REDTEAM_MAX_TOKENS", "").strip()
+def _positive_int_env(name: str) -> int | None:
+    """Return an optional positive integer environment setting."""
+    raw = os.environ.get(name, "").strip()
     if not raw:
         return None
     try:
         value = int(raw)
     except ValueError as exc:
-        raise ValueError("REDTEAM_MAX_TOKENS must be a positive integer") from exc
+        raise ValueError(f"{name} must be a positive integer") from exc
     if value <= 0:
-        raise ValueError("REDTEAM_MAX_TOKENS must be a positive integer")
+        raise ValueError(f"{name} must be a positive integer")
     return value
+
+
+def _completion_limits() -> dict[str, int]:
+    """Return the selected optional completion-limit request parameter."""
+    max_tokens = _positive_int_env("REDTEAM_MAX_TOKENS")
+    max_completion_tokens = _positive_int_env("REDTEAM_MAX_COMPLETION_TOKENS")
+    if max_tokens is not None and max_completion_tokens is not None:
+        raise ValueError("Set only one of REDTEAM_MAX_TOKENS or REDTEAM_MAX_COMPLETION_TOKENS")
+    if max_tokens is not None:
+        return {"max_tokens": max_tokens}
+    if max_completion_tokens is not None:
+        return {"max_completion_tokens": max_completion_tokens}
+    return {}
 
 
 def _reasoning_effort() -> str | None:
@@ -248,9 +261,7 @@ def llm_json(prompt: str, system: str, *, temperature: float = 0.2) -> dict:
             {"role": "user", "content": prompt},
         ],
     }
-    max_tokens = _max_tokens()
-    if max_tokens is not None:
-        request["max_tokens"] = max_tokens
+    request.update(_completion_limits())
     reasoning_effort = _reasoning_effort()
     if reasoning_effort is not None:
         request["reasoning_effort"] = reasoning_effort
