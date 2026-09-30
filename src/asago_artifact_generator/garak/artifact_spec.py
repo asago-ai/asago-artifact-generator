@@ -16,6 +16,7 @@ from .. import llm as llm_mod
 from ..extract import ScenarioContext
 from ..llm import llm_json
 from .classify import lookup_surface
+from .judge import JudgeResult, judge_artifact, resolve_max_attempts
 
 log = logging.getLogger(__name__)
 
@@ -192,6 +193,11 @@ class ArtifactBuildResult:
     artifact: ScenarioArtifact
     ok: bool
     errors: list[str]
+    attempts: int = 1
+    fidelity_total: int | None = None
+    scores: dict[str, int] | None = None
+    critical_violations: list[str] | None = None
+    rubric_errors: list[str] | None = None
 
 
 def scenario_to_yaml(ctx: ScenarioContext, *, include_narrative: bool = False) -> str:
@@ -319,13 +325,31 @@ def _feedback_block(errors: list[str]) -> str:
     )
 
 
+def structural_errors(
+    data: dict[str, Any],
+    surface: str,
+) -> tuple[list[str], ScenarioArtifact | None]:
+    """Deterministic transcript and rubric gate. The judge is separate."""
+    errors = validate_tool_flow(data)
+    parsed: ScenarioArtifact | None = None
+    if not errors:
+        try:
+            parsed = ScenarioArtifact.model_validate(data)
+        except Exception as exc:
+            return [f"{type(exc).__name__}: {exc}"], None
+        errors = gate_artifact_errors(parsed, expected_surface=surface)
+    return errors, parsed
+
+
 def generate_scenario_artifact(
     ctx: ScenarioContext,
     prompt_path: Path,
     *,
     injection_surface: str | None = None,
+    max_attempts: int | None = None,
 ) -> ArtifactBuildResult:
     surface = injection_surface or lookup_surface(ctx)
+    attempts_allowed = resolve_max_attempts(max_attempts)
     template = prompt_path.read_text(encoding="utf-8")
     base_prompt = _fill(
         template,
@@ -333,55 +357,67 @@ def generate_scenario_artifact(
         injection_surface=surface,
     )
     log.info(
-        "Generating scenario artifact with %s (injection_surface=%s)",
+        "Generating scenario artifact with %s (injection_surface=%s, max_attempts=%s)",
         prompt_path,
         surface,
+        attempts_allowed,
     )
 
     artifact: ScenarioArtifact | None = None
     last_error: Exception | None = None
     last_data: dict[str, Any] | None = None
     last_errors: list[str] = []
+    last_judge: JudgeResult | None = None
     feedback = ""
+    used = 0
 
-    for attempt in range(MAX_GENERATION_ATTEMPTS):
+    for attempt in range(attempts_allowed):
+        used = attempt + 1
         user_prompt = base_prompt + feedback
         try:
             data = llm_json(user_prompt, _LLM_SYSTEM)
             if not isinstance(data, dict):
                 raise ValueError("LLM did not return a JSON object")
             last_data = data
-            errors = validate_tool_flow(data)
-            parsed: ScenarioArtifact | None = None
-            if not errors:
-                parsed = ScenarioArtifact.model_validate(data)
-                errors = gate_artifact_errors(parsed, expected_surface=surface)
-            last_errors = errors
+            errors, parsed = structural_errors(data, surface)
+            if parsed is not None:
+                artifact = parsed
             if errors:
+                last_errors = errors
+                last_judge = None
                 log.warning(
-                    "Artifact validation attempt %d failed: %s",
-                    attempt + 1,
+                    "Artifact structural validation attempt %d failed: %s",
+                    used,
                     "; ".join(errors),
                 )
                 feedback = _feedback_block(errors)
-                if parsed is not None:
-                    artifact = parsed
                 continue
-            artifact = parsed
+            judged = judge_artifact(ctx, data)
+            last_judge = judged
+            if judged.errors:
+                last_errors = judged.errors
+                log.warning(
+                    "Artifact judge attempt %d failed: %s",
+                    used,
+                    "; ".join(judged.errors),
+                )
+                feedback = _feedback_block(judged.errors)
+                continue
             last_errors = []
             break
         except Exception as e:
             last_error = e
-            log.warning("Artifact generation attempt %d failed: %s", attempt + 1, e)
-            feedback = _feedback_block([str(e)])
+            last_errors = [str(e)]
+            last_judge = None
+            log.warning("Artifact generation attempt %d failed: %s", used, e)
+            feedback = _feedback_block(last_errors)
 
     if artifact is None:
         if last_data is not None:
             try:
                 artifact = ScenarioArtifact.model_validate(last_data)
-                last_errors = validate_tool_flow(last_data) + gate_artifact_errors(
-                    artifact, expected_surface=surface
-                )
+                if not last_errors:
+                    last_errors, _parsed = structural_errors(last_data, surface)
             except Exception as e:
                 raise last_error or e from e
         else:
@@ -389,4 +425,13 @@ def generate_scenario_artifact(
 
     if last_errors:
         log.warning("Artifact validation failed: %s", "; ".join(last_errors))
-    return ArtifactBuildResult(artifact=artifact, ok=not last_errors, errors=last_errors)
+    return ArtifactBuildResult(
+        artifact=artifact,
+        ok=not last_errors,
+        errors=last_errors,
+        attempts=used,
+        fidelity_total=None if last_judge is None else last_judge.fidelity_total,
+        scores=None if last_judge is None else last_judge.scores,
+        critical_violations=None if last_judge is None else last_judge.critical_violations,
+        rubric_errors=None if last_judge is None else last_judge.rubric_errors,
+    )

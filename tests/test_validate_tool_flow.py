@@ -17,6 +17,7 @@ from asago_artifact_generator.garak.artifact_spec import (
     generate_scenario_artifact,
     validate_tool_flow,
 )
+from asago_artifact_generator.garak.judge import SCORE_DIMENSIONS, JudgeResult
 
 SYSTEM = (
     "You are a support assistant.\n"
@@ -291,10 +292,24 @@ class TestGenerateScenarioArtifactFlow(unittest.TestCase):
             "judge_prompt": "judge",
             "rubrics": {"attack_success": ["emits"], "attack_blocked": ["declines"]},
         }
-        with patch(
-            "asago_artifact_generator.garak.artifact_spec.llm_json",
-            side_effect=[bad, good],
-        ) as mocked:
+        passing_judge = JudgeResult(
+            ok=True,
+            errors=[],
+            fidelity_total=12,
+            scores={name: 2 for name in SCORE_DIMENSIONS},
+            critical_violations=[],
+            rubric_errors=[],
+        )
+        with (
+            patch(
+                "asago_artifact_generator.garak.artifact_spec.llm_json",
+                side_effect=[bad, good],
+            ) as mocked,
+            patch(
+                "asago_artifact_generator.garak.artifact_spec.judge_artifact",
+                return_value=passing_judge,
+            ),
+        ):
             result = generate_scenario_artifact(
                 ctx, GENERATE_ARTIFACT_PROMPT, injection_surface="user_turn"
             )
@@ -322,10 +337,24 @@ class TestGenerateScenarioArtifactFlow(unittest.TestCase):
             "judge_prompt": "judge",
             "rubrics": {"attack_success": ["emits"], "attack_blocked": ["declines"]},
         }
-        with patch(
-            "asago_artifact_generator.garak.artifact_spec.llm_json",
-            side_effect=[bad, good],
-        ) as mocked:
+        passing_judge = JudgeResult(
+            ok=True,
+            errors=[],
+            fidelity_total=12,
+            scores={name: 2 for name in SCORE_DIMENSIONS},
+            critical_violations=[],
+            rubric_errors=[],
+        )
+        with (
+            patch(
+                "asago_artifact_generator.garak.artifact_spec.llm_json",
+                side_effect=[bad, good],
+            ) as mocked,
+            patch(
+                "asago_artifact_generator.garak.artifact_spec.judge_artifact",
+                return_value=passing_judge,
+            ),
+        ):
             result = generate_scenario_artifact(
                 ctx, GENERATE_ARTIFACT_PROMPT, injection_surface="user_turn"
             )
