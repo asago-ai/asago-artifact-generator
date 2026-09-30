@@ -58,6 +58,16 @@ def generate(
             help="Write garak JSON even if artifact validation fails (result is still not ok)",
         ),
     ] = False,
+    max_attempts: Annotated[
+        int | None,
+        typer.Option(
+            "--max-attempts",
+            help=(
+                "Regenerate after a failed structural or judge gate, feeding the "
+                "errors back into the prompt. Default is 3, or ARTIFACT_MAX_ATTEMPTS."
+            ),
+        ),
+    ] = None,
     verbose: Annotated[
         bool,
         typer.Option("-v", "--verbose", help="Verbose logging"),
@@ -93,6 +103,7 @@ def generate(
                 use_llm=not no_llm,
                 force=force,
                 dry_run=dry_run,
+                max_attempts=max_attempts,
             )
             entry = {
                 "scenario_id": result.scenario_id,

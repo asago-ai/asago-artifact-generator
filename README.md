@@ -83,9 +83,10 @@ asago-artifact-generator generate -v
 
 | Flag | Effect |
 |------|--------|
-| `--force` | Write garak JSON even when structural validation fails |
+| `--force` | Write garak JSON even when structural or judge validation fails |
 | `--dry-run` | Classify + LLM + validate only — no files written |
 | `--no-llm` | Skip LLM (useful to test pre-plan surface skips) |
+| `--max-attempts N` | Regenerate up to N times after a failed gate, appending the errors to the prompt. Default `3`. Override with `ARTIFACT_MAX_ATTEMPTS`. |
 | `--output-dir DIR` | Override default `runs/` output directory |
 | `-v` | Verbose logging |
 
@@ -94,7 +95,7 @@ asago-artifact-generator generate -v
 1. **Classify** injection surface from `narrative.entry_point` (`input` → `user_turn`, `tool_execution` → `tool_return`). `threat_name` containing “supply chain” is `none` (no coverage).
 2. **Skip** unwritable surfaces (supply chain / `none`) — writes a minimal artifact without calling the LLM.
 3. **Generate** artifact via one-shot LLM (`prompts/generate_artifact.md`).
-4. **Validate** structural gates (rubric completeness, surface/turn alignment, schema). 
+4. **Validate** structural gates (tool-call flow, rubric completeness, surface/turn alignment, schema), then an LLM judge. The artifact is accepted only when fidelity is at least 10/12 and the judge reports no critical violations. Failures from either gate are appended to the generation prompt and retried up to `--max-attempts` (default 3).
 5. **Gate** platform coverage: `full`, `partial`, or `skip` .
 
 ## Output layout
@@ -119,13 +120,19 @@ runs/
 - `turns[]` with adversarial attack turn
 - `detector_rubric` (judge prompt + success/blocked rubrics)
 
-**`validation.json`** — sidecar from the structural gate:
+**`validation.json`** — sidecar from the structural gate and the judge:
 
 ```json
 {
   "ok": true,
   "checks": "Artifact structural gate after LLM generation: ...",
-  "errors": []
+  "errors": [],
+  "attempts": 1,
+  "max_attempts": 3,
+  "fidelity_total": 12,
+  "scores": {"objective": 2},
+  "critical_violations": [],
+  "rubric_errors": []
 }
 ```
 
@@ -179,6 +186,7 @@ The unit test suite is deterministic and does not require an LLM endpoint.
 | `cli.py` | `typer` CLI — orchestrates classify → generate → validate → save |
 | `garak/gen.py` | Core generation logic for Garak artifacts |
 | `garak/artifact_spec.py` | `ScenarioArtifact` schema, LLM call, `gate_artifact_errors`, artifact dicts |
+| `garak/judge.py` | Legacy-scenario judge, 10/12 fidelity gate, critical violations, attempt budget |
 | `garak/spec_io.py` | Paths and I/O for `runs/{id}/{id}-garak.json` and `validation.json` |
 | `garak/classify.py` | Injection-surface table, pre-plan skip, `platform_coverage` gates |
 | `extract.py` | Load scenario YAML into `ScenarioContext` |

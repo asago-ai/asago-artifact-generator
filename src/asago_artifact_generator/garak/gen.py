@@ -17,6 +17,7 @@ from .artifact_spec import (
 )
 from .classify import lookup_surface, surface_skip_reason
 from .gate import gate_from_context
+from .judge import JUDGE_VALIDATION_CHECKS, resolve_max_attempts
 from .spec_io import (
     runs_dir,
     save_garak_artifact,
@@ -36,6 +37,8 @@ class GenResult:
     gate_reason: str = ""
     artifact_path: str | None = None
     errors: list[str] | None = None
+    attempts: int | None = None
+    fidelity_total: int | None = None
 
 
 def _trigger_tool(ctx: ScenarioContext) -> str:
@@ -56,6 +59,19 @@ def _coverage(ctx: ScenarioContext, surface: str) -> tuple[str, str]:
     )
 
 
+def _validation_details(build, max_attempts: int) -> dict:
+    details: dict = {"attempts": build.attempts, "max_attempts": max_attempts}
+    if build.fidelity_total is not None:
+        details["fidelity_total"] = build.fidelity_total
+    if build.scores is not None:
+        details["scores"] = build.scores
+    if build.critical_violations is not None:
+        details["critical_violations"] = build.critical_violations
+    if build.rubric_errors is not None:
+        details["rubric_errors"] = build.rubric_errors
+    return details
+
+
 def generate_artifact(
     ctx: ScenarioContext,
     *,
@@ -64,14 +80,17 @@ def generate_artifact(
     use_llm: bool = True,
     force: bool = False,
     dry_run: bool = False,
+    max_attempts: int | None = None,
 ) -> GenResult:
     """Scenario YAML → runs/{scenario_id}/{scenario_id}-garak.json.
     ``gate`` is Garak coverage (full / partial / skip)
-    ``ok`` / ``errors`` are structural validation.
+    ``ok`` / ``errors`` are structural validation plus the judge gate.
     ``force`` only controls whether an invalid artifact JSON is written.
+    ``max_attempts`` is the generation budget; unset uses ARTIFACT_MAX_ATTEMPTS or 3.
     """
     prompt = prompt_path or GENERATE_ARTIFACT_PROMPT
     out_base = runs_dir(output_dir)
+    attempts_allowed = resolve_max_attempts(max_attempts)
 
     skip_reason = surface_skip_reason(ctx)
     if skip_reason:
@@ -114,13 +133,19 @@ def generate_artifact(
             errors=["Artifact generation requires LLM (omit --no-llm)"],
         )
 
-    build = generate_scenario_artifact(ctx, prompt, injection_surface=injection_surface)
+    build = generate_scenario_artifact(
+        ctx,
+        prompt,
+        injection_surface=injection_surface,
+        max_attempts=attempts_allowed,
+    )
     save_validation(
         ctx.scenario_id,
         build.ok,
         build.errors,
         out_base,
-        checks=ARTIFACT_VALIDATION_CHECKS,
+        checks=ARTIFACT_VALIDATION_CHECKS + " " + JUDGE_VALIDATION_CHECKS,
+        details=_validation_details(build, attempts_allowed),
     )
 
     if not build.ok:
@@ -132,6 +157,8 @@ def generate_artifact(
                 gate=gate_result,
                 gate_reason=gate_reason,
                 errors=build.errors,
+                attempts=build.attempts,
+                fidelity_total=build.fidelity_total,
             )
 
     if dry_run:
@@ -142,6 +169,8 @@ def generate_artifact(
             gate=gate_result,
             gate_reason=gate_reason,
             errors=build.errors if build.errors else None,
+            attempts=build.attempts,
+            fidelity_total=build.fidelity_total,
         )
 
     artifact_path = save_garak_artifact(
@@ -157,6 +186,8 @@ def generate_artifact(
         gate_reason=gate_reason,
         artifact_path=str(artifact_path),
         errors=build.errors if build.errors else None,
+        attempts=build.attempts,
+        fidelity_total=build.fidelity_total,
     )
 
 

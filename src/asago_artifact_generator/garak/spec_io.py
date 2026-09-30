@@ -63,14 +63,15 @@ def save_validation(
     base: Path | None = None,
     *,
     checks: str = "",
+    details: dict[str, Any] | None = None,
 ) -> Path:
     out = scenario_run_dir(scenario_id, base)
     out.mkdir(parents=True, exist_ok=True)
     path = out / VALIDATION_FILE
-    path.write_text(
-        json.dumps({"ok": ok, "checks": checks, "errors": errors}, indent=2),
-        encoding="utf-8",
-    )
+    payload: dict[str, Any] = {"ok": ok, "checks": checks, "errors": errors}
+    if details:
+        payload.update(details)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
 
 
